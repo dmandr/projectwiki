@@ -9,8 +9,11 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@codemirror/view": "6.43.15",
+    "@lexical/react": "0.48.0",
     "@mdxeditor/editor": "4.3.3",
     "esbuild": "0.28.2",
+    "lexical": "0.48.0",
     "react": "19.3.1",
     "react-dom": "19.3.1"
   },

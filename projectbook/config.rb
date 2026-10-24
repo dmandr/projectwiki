@@ -16,7 +16,12 @@ end
 
 module ProjectBookEditorView
   def projectbook_mdx_editor
-    ENV.fetch('GOLLUM_EDITOR', 'mdx') == 'mdx'
+    ENV.fetch('GOLLUM_EDITOR', 'mdx') == 'mdx' && (!respond_to?(:format) || format == 'markdown')
+  end
+
+  def projectbook_editor_path
+    return @page.url_path if @page
+    [@path.to_s.sub(%r{^/+}, '').sub(%r{/+$}, ''), @name.to_s + (@ext.to_s.empty? ? '.md' : @ext.to_s)].reject(&:empty?).join('/')
   end
 
   def projectbook_tree_enabled

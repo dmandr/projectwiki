@@ -15,6 +15,7 @@ require 'gollum'
 require 'gollum/assets'
 require 'gollum/navigation_index'
 require 'gollum/projectbook_creation'
+require 'gollum/projectbook_save'
 
 # Requirements for loading the layout view:
 require 'gollum/views/helpers'
@@ -165,6 +166,23 @@ module Precious
     end
 
     namespace '/gollum' do
+      post '/projectbook/save' do
+        content_type :json
+        halt 403, {error: 'This request must come from the wiki interface.'}.to_json unless request.env['HTTP_X_PROJECTWIKI_REQUEST'] == '1'
+        halt 413, {error: 'Save request is too large.'}.to_json if request.content_length.to_i > 55 * 1024 * 1024
+        begin
+          input = JSON.parse(params.fetch('document', ''))
+          result = Gollum::ProjectbookSave.save(wiki_new, input, params.fetch('files', []), commit_options)
+          result.merge(url: @base_url + '/' + Gollum::NavigationIndex.encode_path(result[:path])).to_json
+        rescue JSON::ParserError
+          halt 422, {error: 'Invalid document data.'}.to_json
+        rescue Gollum::ProjectbookCreation::Error => e
+          halt e.status, {error: e.message}.to_json
+        rescue Gollum::DuplicatePageError, Gollum::IllegalDirectoryPath
+          halt 409, {error: 'A destination changed or already exists. Your draft is preserved.'}.to_json
+        end
+      end
+
       post '/projectbook/new' do
         content_type :json
         halt 403, {error: 'This request must come from the wiki interface.'}.to_json unless request.env['HTTP_X_PROJECTWIKI_REQUEST'] == '1'

@@ -39,7 +39,7 @@
   </script>
   {{#sprockets_javascript_tag}}app{{/sprockets_javascript_tag}}
   {{#has_editor}}
-  {{#sprockets_javascript_tag}}editor{{/sprockets_javascript_tag}}
+  {{^projectbook_mdx_editor}}{{#sprockets_javascript_tag}}editor{{/sprockets_javascript_tag}}{{/projectbook_mdx_editor}}
   {{/has_editor}}
 
   {{#katex}}

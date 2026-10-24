@@ -44,6 +44,15 @@
     }
   }
   const nav = document.getElementById('projectbook-nav');
+  // Keep attachment links portable in Markdown, but open them in the wiki viewer.
+  document.addEventListener('DOMContentLoaded', () => {
+    const previews = new Map(links.filter(link => link.href.includes('/gollum/file/')).map(link => [baseUrl + '/' + link.dataset.document, link.href]));
+    for (const link of document.querySelectorAll('#wiki-body a[href]')) {
+      const url = new URL(link.href);
+      if (url.origin !== location.origin || url.search) continue;
+      try { const preview = previews.get(decodeURIComponent(url.pathname)); if (preview) link.href = preview + url.hash; } catch (_) {}
+    }
+  });
   function plainClick(event) {
     return event.button === 0 && !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey;
   }
@@ -124,7 +133,7 @@
     const editor = document.getElementById('gollum-editor-form');
     if (!editor) return;
     const body = document.getElementById('gollum-editor-body');
-    const changedBody = body && (window.ace_editor?.getValue() ?? body.value) !== body.defaultValue;
+    const changedBody = window.projectbookEditorDirty?.() || (body && (window.ace_editor?.getValue() ?? body.value) !== body.defaultValue);
     const changedExtras = Array.from(editor.querySelectorAll('textarea[name=header], textarea[name=footer], textarea[name=sidebar]')).some(field => field.value !== field.defaultValue);
     const notice = document.getElementById('projectbook-action-notice');
     if (changedBody || changedExtras) {
