@@ -17,6 +17,7 @@ require 'gollum/navigation_index'
 require 'gollum/projectbook_creation'
 require 'gollum/projectbook_titles'
 require 'gollum/projectbook_save'
+require 'gollum/projectbook_mcp'
 
 # Requirements for loading the layout view:
 require 'gollum/views/helpers'
@@ -88,6 +89,7 @@ module Precious
     register Mustache::Sinatra
     register Sinatra::Namespace
     use Gollum::ProjectbookCreation::WriteLock
+    use Gollum::ProjectbookMCP::Endpoint, self
     include Precious::Helpers
 
     Encoding.default_external = "UTF-8"

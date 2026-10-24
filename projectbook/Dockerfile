@@ -19,6 +19,7 @@ FROM gollumwiki/gollum:6.1.0@sha256:05f23e49ba475169ef5d42356428d9762e88c94396fd
 USER root
 WORKDIR /opt/projectbook-source
 COPY --from=native /usr/local/bundle/ /usr/local/bundle/
+RUN gem install simpleidn:0.3.0 hana:1.3.7 json_schemer:2.5.0 mcp:1.8.1 --ignore-dependencies --no-document
 COPY . .
 RUN ruby projectbook/verify-runtime.rb \
     && gem build gollum.gemspec \

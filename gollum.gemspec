@@ -1,6 +1,6 @@
 Gem::Specification.new do |s|
   s.required_rubygems_version = Gem::Requirement.new('>= 0') if s.respond_to? :required_rubygems_version=
-  s.required_ruby_version = '>= 2.6'
+  s.required_ruby_version = '>= 2.7'
 
   s.name              = 'gollum'
   s.version           = '6.1.0'
@@ -38,6 +38,7 @@ Gem::Specification.new do |s|
   s.add_dependency 'therubyrhino', '~> 2.1.0'
   s.add_dependency 'webrick', '~> 1.7'
   s.add_dependency 'i18n', '~> 1.8'
+  s.add_dependency 'mcp', '= 1.8.1'
 
   s.add_development_dependency 'rack-test', '~> 0.6.3'
   s.add_development_dependency 'shoulda', '~> 3.6.0'
@@ -76,6 +77,8 @@ Gem::Specification.new do |s|
     lib/gollum/navigation_index.rb
     lib/gollum/projectbook_creation.rb
     lib/gollum/projectbook_save.rb
+    lib/gollum/projectbook_knowledge.rb
+    lib/gollum/projectbook_mcp.rb
     lib/gollum/helpers.rb
     lib/gollum/locales/cn.yml
     lib/gollum/locales/en.yml

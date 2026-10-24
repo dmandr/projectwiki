@@ -49,6 +49,7 @@ module Gollum
           prefix = wiki.page_file_dir.to_s.sub(%r{/+\z}, '')
           previous = cached ? cached.entries.to_h { |item| [item.url_path, item] } : {}
           entries = revision ? wiki.tree_map_for(revision).filter_map do |entry|
+            next if entry.path.start_with?('.projectbook/')
             next unless Gollum::Page.valid_page_name?(entry.name) ||
               (!entry.name.start_with?('_') && !Gollum::Page.protected_files.include?(entry.name))
             path = entry.path.dup.freeze

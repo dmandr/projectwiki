@@ -165,3 +165,62 @@ Confirming an unchanged Title leaves the Markdown bytes untouched, including inl
 Open a saved document and use the printer icon in the shared header. It calls the browser's native print dialog; choose a printer or Save as PDF. In macOS Safari, PDF options are in the system print dialog. The action is available in document view, not in the editor or directory listing.
 
 Print styles remove navigation, search, breadcrumbs, action buttons and wiki header/sidebar/footer blocks. The rendered document title, text, tables and images remain. Large images are bounded to the printable area; table headers repeat across pages. Browser-generated URL/date headers and footers are controlled by the print dialog, independently of the page.
+
+### MCP: book access and durable agent memory
+
+The local Streamable HTTP endpoint is `http://127.0.0.1:4569/mcp` (same container and port as the wiki). It uses the official Ruby SDK, pinned to `mcp 1.8.1`. No external model/API key or database is needed. This stage reads saved documents and can write agent notes; it does **not** expose document editing, uploads or Git push.
+
+Connect a local Codex client:
+
+```sh
+codex mcp add projectbook --url http://127.0.0.1:4569/mcp
+codex mcp list
+```
+
+Or merge this section into the client's configuration (do not replace the rest of the file):
+
+```toml
+[mcp_servers.projectbook]
+url = "http://127.0.0.1:4569/mcp"
+```
+
+Reconnect/restart the client's MCP connection after configuration. These instructions follow [OpenAI's MCP connection example](https://developers.openai.com/learn/docs-mcp). We do not change your client settings automatically. An agent on another computer or a cloud executor cannot reach this Mac via its own `127.0.0.1`; remote HTTPS/auth deployment remains a separate step.
+
+Tools:
+
+| Tool | Purpose |
+| --- | --- |
+| `get_book_context` | Compact map, entry points, counts and recent agent notes. Also available as `projectbook://book/context`. |
+| `list_tree` | Documents, folders and attachments, with depth/pagination and a pinned revision. |
+| `read_document` | Saved Markdown, line range, headings, blob SHA, URL and scoped agent notes; optional historical revision. |
+| `search_documents` | Case-insensitive literal terms over Markdown title/path/body, with excerpts and line numbers. |
+| `get_history` | Book/file/directory commits; exact paths, no automatic rename following. |
+| `get_diff` | Diff of one Markdown path at two reachable full commit SHAs. |
+| `list_agent_notes` | Find notes by scope or text, including inherited parent context and descendant notes. |
+| `read_agent_note` | Full note, version, sources and stale status. |
+| `save_agent_note` | Create/update durable summary, finding or task log; one local Git commit, no push. |
+
+Try asking: “Read the book map, find the engine documentation, compare its recent changes and summarise the relevant findings with links. Save the useful result as an agent note linked to the source versions.” Another session can ask: “Load saved findings for the engine section and check whether the sources have changed.” Search/work history is saved explicitly as a `task_log`, not by recording every query or the agent's private reasoning.
+
+Agent notes are ordinary UTF-8 JSON files at `.projectbook/agent-memory/<uuid>.json` in the **book** repository. `content` is Markdown. The logical `scope` is a document path, directory, or empty string for book-wide context. Each record contains `kind`, `title`, `content`, `agent` (a supplied label, not an authenticated identity), timestamps, and `sources: [{path, sha}]`. Summary sources are mandatory; use blob SHAs from `read_document`/`list_tree`. Changed, moved or deleted sources mark notes `stale`; these notes remain retrievable but need verification. Scope/source paths are not automatically rewritten by Move yet.
+
+The UUID is chosen by the caller and reused on retries. Create with `expected_version: ""`; update with the note's current `version`. Concurrent edits return a version conflict. Repeating identical content is a no-op. Memory files are excluded from the explorer/overview and Markdown document search; they are not secret or access-controlled separately from the book and remain visible in Git/history. Existing generic wiki file routes are not a confidentiality boundary. Git clone/push carries the notes along with the book.
+
+Deployment settings (export in ignored `projectbook/settings.local.sh`):
+
+- `PROJECTBOOK_MCP_ENABLED=false` disables the endpoint.
+- `PROJECTBOOK_MCP_MEMORY_WRITE=false` exposes only read tools; `GOLLUM_READ_ONLY=true` also removes memory writes.
+- `PROJECTBOOK_MCP_TOKEN` optionally requires `Authorization: Bearer ...`; leave credentials out of Git. For Codex, configure `bearer_token_env_var` with a token-bearing environment variable available to the client. Do not put a token into a URL.
+- The default test deployment binds only to Mac loopback and has no token. The SDK validates Host/Origin; arbitrary browser origins are rejected. Do not change the bind address to publish this test configuration.
+
+MCP runs in the same process and outer write lock as the Web UI. Memory writes therefore share the UI's serialization. This does not lock external Git commands/other processes; no concurrent external writers are supported yet. Read tools pin a Git revision and do not checkout old commits. Pass that revision to later pages of a result to keep a consistent snapshot. Only book-root deployments (`page_file_dir` empty) are supported in this first version.
+
+Limits: request 128 KiB; tool response 256 KiB; 100 results per page; Markdown text up to 2 MiB; reads up to 500 lines/40,000 characters; diffs up to 40,000 characters; memory content up to 20,000 characters and complete record up to 100 KB. Truncation/pagination are explicit. Source text is cached by blob SHA with a 32 MiB process-local bound. A changed blob is read again; no generated cache is committed.
+
+Not yet implemented: semantic/vector search, PDF text extraction/OCR, automatic summarisation, full task management, document writes through MCP, or Git synchronization. A later RAG layer can combine lexical search and embeddings (e.g. [Qdrant hybrid queries](https://qdrant.tech/documentation/search/hybrid-queries/)); the vector index remains rebuildable, while authored summaries and notes live in Git. Model choice and any external transfer of book content need to be configured separately.
+
+Tests (temporary repositories; not the user's book):
+
+```sh
+docker exec -i projectbook-fork-wiki-1 ruby - < projectbook/test/mcp_test.rb
+```
