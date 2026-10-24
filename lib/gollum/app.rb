@@ -13,6 +13,7 @@ require 'pathname'
 
 require 'gollum'
 require 'gollum/assets'
+require 'gollum/navigation_index'
 
 # Requirements for loading the layout view:
 require 'gollum/views/helpers'
@@ -20,6 +21,7 @@ require 'gollum/views/helpers/locale_helpers'
 require 'gollum/views/template_cascade'
 
 require 'gollum/views/layout'
+require 'gollum/views/attachment'
 require 'gollum/views/editable'
 require 'gollum/views/has_page'
 require 'gollum/views/has_user_icons'
@@ -161,6 +163,16 @@ module Precious
     end
 
     namespace '/gollum' do
+      get '/file/*' do
+        fullpath = params[:splat].first
+        halt 400 if fullpath.split('/').include?('..')
+        forbid if Gollum::Page.protected_files.include?(::File.basename(fullpath))
+        wiki = wiki_new
+        @file = wiki.file(fullpath, wiki.ref, true)
+        halt 404 unless @file
+        mustache :attachment
+      end
+
       get '/feed/' do
         url = "#{env['rack.url_scheme']}://#{env['HTTP_HOST']}"
         changes = wiki_new.latest_changes(::Gollum::Page.log_pagination_options(
@@ -564,7 +576,7 @@ module Precious
         )?      # end the optional non-capturing group
       }x do |path|
         wiki         = wiki_new
-        @results     = wiki.tree_list
+        @results     = Gollum::NavigationIndex.for(wiki).entries.dup
 
         if path
           @path = Pathname.new(path).cleanpath.to_s

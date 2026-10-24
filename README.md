@@ -1,3 +1,5 @@
+> **ProjectWiki:** [локальный Docker-стенд и инструкции](projectbook/README.md). Ниже сохранена документация Gollum.
+
 # gollum - A git-based Wiki
 
 [![Gem Version](https://badge.fury.io/rb/gollum.svg)](http://badge.fury.io/rb/gollum)

@@ -47,7 +47,7 @@ Gem::Specification.new do |s|
   s.add_development_dependency 'terser', '~> 1.1'
 
   # = MANIFEST =
-  s.files = Dir['lib/gollum/public/assets/**/*'] + %w[
+  s.files = Dir['lib/gollum/public/assets/**/*', 'lib/gollum/public/assets/.sprockets-manifest-*.json'] + %w[
     CONTRIBUTING.md
     Dockerfile
     Gemfile
@@ -70,6 +70,7 @@ Gem::Specification.new do |s|
     lib/gollum.rb
     lib/gollum/app.rb
     lib/gollum/assets.rb
+    lib/gollum/navigation_index.rb
     lib/gollum/helpers.rb
     lib/gollum/locales/cn.yml
     lib/gollum/locales/en.yml
@@ -215,8 +216,9 @@ Gem::Specification.new do |s|
     lib/gollum/public/gollum/stylesheets/print.scss
     lib/gollum/public/gollum/stylesheets/spinner.scss
     lib/gollum/public/gollum/stylesheets/tables.scss
-    lib/gollum/public/gollum/stylesheets/template.scss.erb
+    lib/gollum/public/gollum/stylesheets/template.scss
     lib/gollum/public/gollum/stylesheets/wiki_content.scss
+    lib/gollum/templates/attachment.mustache
     lib/gollum/templates/commit.mustache
     lib/gollum/templates/compare.mustache
     lib/gollum/templates/create.mustache
@@ -238,6 +240,7 @@ Gem::Specification.new do |s|
     lib/gollum/templates/searchbar.mustache
     lib/gollum/templates/wiki_content.mustache
     lib/gollum/uri_encode_component.rb
+    lib/gollum/views/attachment.rb
     lib/gollum/views/commit.rb
     lib/gollum/views/compare.rb
     lib/gollum/views/create.rb

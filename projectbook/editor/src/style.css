@@ -1,0 +1,20 @@
+.pb-mdx-active #gollum-editor-body-ace, .pb-mdx-active #gollum-editor-function-bar,
+.pb-mdx-active #gollum-editor-help { display: none !important; }
+.pb-editor-notice { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 12px 0; color: #576575; font-size: 13px; }
+.pb-editor-notice a { margin-left: auto; }
+.pb-editor-status { color: #8b4800; margin: 8px 0; white-space: pre-wrap; }
+#projectbook-mdx { border: 1px solid #d0d7de; border-radius: 8px; background: white; }
+#projectbook-mdx [role=toolbar] { flex-wrap: wrap; height: auto; border-radius: 8px 8px 0 0; }
+#projectbook-mdx .pb-prose { min-height: 450px; padding: 24px; font-size: 16px; line-height: 1.65; }
+#projectbook-mdx .pb-prose h1 { font-size: 2em; margin: 0.8em 0; }
+#projectbook-mdx .pb-prose h2 { font-size: 1.5em; margin: 0.8em 0; }
+#projectbook-mdx .pb-prose h3 { font-size: 1.2em; margin: 0.8em 0; }
+#projectbook-mdx .pb-prose p { margin-bottom: 1em; }
+#projectbook-mdx .pb-prose ul, #projectbook-mdx .pb-prose ol { padding-left: 28px; }
+#projectbook-mdx .pb-prose img { max-width: 100%; height: auto; }
+#projectbook-mdx .pb-prose blockquote { border-left: 3px solid #b6c4d3; padding-left: 16px; color: #576575; }
+#projectbook-mdx .cm-editor { min-height: 450px; font-size: 14px; }
+#projectbook-mdx .cm-scroller { overflow: auto; }
+#projectbook-mdx button[aria-label="Visual"]::after { content: 'Visual'; margin-left: 5px; }
+#projectbook-mdx button[aria-label="Markdown"]::after { content: 'Markdown'; margin-left: 5px; }
+#projectbook-mdx button[aria-label="Changes"]::after { content: 'Changes'; margin-left: 5px; }

@@ -1,4 +1,5 @@
 require 'pathname'
+require 'gollum/navigation_index'
 
 module Precious
   module Views
@@ -7,7 +8,7 @@ module Precious
       HIDDEN_PATHS = ['.gitkeep']
 
       def title
-        t[:title]
+        @path ? ::File.basename(@path) : 'Files'
       end
 
       # def editable
@@ -28,7 +29,7 @@ module Precious
             if title == path.basename
               breadcrumb << %{<li class="breadcrumb-item" aria-current="page">#{CGI.escapeHTML(title.to_s)}</li>}
             else
-              breadcrumb << %{<li class="breadcrumb-item"><a href="#{overview_path}/#{crumb}/">#{CGI.escapeHTML(title.to_s)}</a></li>}
+              breadcrumb << %{<li class="breadcrumb-item"><a href="#{overview_path}/#{Gollum::NavigationIndex.encode_path(crumb.to_s)}/">#{CGI.escapeHTML(title.to_s)}</a></li>}
             end
           end
           breadcrumb << %{</ol></nav>}
@@ -50,10 +51,10 @@ module Precious
               # result contains a folder
               folder_name = result_path.split('/').first
               folder_path = @path ? "#{@path}/#{folder_name}" : folder_name
-              folder_url  = "#{overview_path}/#{folder_path}/"
+              folder_url  = "#{overview_path}/#{Gollum::NavigationIndex.encode_path(folder_path)}/"
               files_and_folders << {name: folder_name, icon: rocticon('file-directory-fill'), type: 'dir', url: folder_url, is_file: false}
             elsif !HIDDEN_PATHS.include?(result_path)
-              file_url = page_route(result.escaped_url_path)
+              file_url = Gollum::Page.valid_page_name?(result.filename) ? page_route(result.escaped_url_path) : page_route('gollum/file/' + result.escaped_url_path)
               files_and_folders << {name: result.filename, icon: rocticon('file'), type: 'file', url: file_url, file_path: result.escaped_url_path, is_file: true}
             end
           end

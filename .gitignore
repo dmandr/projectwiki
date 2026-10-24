@@ -10,3 +10,10 @@ node_modules
 !.sprockets*
 !lib/gollum/public/gollum/stylesheets/_styles.css
 !.github*
+
+# ProjectWiki deployment and frontend build products.
+!.dockerignore
+projectbook/editor/dist/
+projectbook/editor/node_modules/
+projectbook/settings.local.sh
+projectbook/.runtime/

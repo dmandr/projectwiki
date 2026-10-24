@@ -1,0 +1,122 @@
+<script>
+(function () {
+  const tree = document.getElementById('projectbook-tree');
+  const filter = document.getElementById('projectbook-filter');
+  const folders = Array.from(tree.querySelectorAll('li[data-folder]'));
+  const links = Array.from(tree.querySelectorAll('a[data-document], a[data-folder-link]'));
+  // New version deliberately ignores the prototype's initially-expanded state.
+  const storageKey = 'projectwiki:tree:v2:' + baseUrl;
+  let state = {};
+  try { state = JSON.parse(localStorage.getItem(storageKey) || '{}'); } catch (_) {}
+  if (!state || typeof state !== 'object' || Array.isArray(state)) state = {};
+  const controls = new Map(folders.map(folder => [folder, {
+    button: folder.querySelector(':scope > .projectbook-tree-row > button'),
+    children: folder.querySelector(':scope > ul'),
+    link: folder.querySelector(':scope > .projectbook-tree-row > a')
+  }]));
+  function expand(folder, open) {
+    const {button, children, link} = controls.get(folder);
+    children.hidden = !open;
+    button.setAttribute('aria-expanded', String(open));
+    button.setAttribute('aria-label', (open ? 'Collapse ' : 'Expand ') + link.textContent);
+    button.title = button.getAttribute('aria-label');
+  }
+  function save() {
+    try { localStorage.setItem(storageKey, JSON.stringify(state)); } catch (_) {}
+  }
+  for (const folder of folders) {
+    expand(folder, state[folder.dataset.folder] === true);
+    controls.get(folder).button.addEventListener('click', () => {
+      const open = controls.get(folder).children.hidden;
+      expand(folder, open);
+      if (!filter.value.trim()) { state[folder.dataset.folder] = open; save(); }
+    });
+  }
+  let current = decodeURIComponent(location.pathname).replace(/\/$/, '');
+  const editing = current.startsWith(baseUrl + '/gollum/edit/') || current.startsWith(baseUrl + '/gollum/create/');
+  const editPrefix = baseUrl + '/gollum/edit/';
+  if (current.startsWith(editPrefix)) current = baseUrl + '/' + current.slice(editPrefix.length);
+  for (const link of links) {
+    const path = decodeURIComponent(new URL(link.href).pathname).replace(/\/$/, '');
+    if (path === current || (link.hasAttribute('data-document') && path.replace(/\.(md|markdown)$/i, '') === current)) {
+      link.setAttribute('aria-current', 'page');
+      link.closest('.projectbook-tree-row, .projectbook-file').classList.add('projectbook-selected');
+    }
+  }
+  const nav = document.getElementById('projectbook-nav');
+  function plainClick(event) {
+    return event.button === 0 && !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey;
+  }
+  for (const link of links) link.addEventListener('click', event => {
+    if (!plainClick(event)) return;
+    if (link.hasAttribute('data-folder-link')) {
+      const folder = link.closest('li[data-folder]');
+      const selected = link.getAttribute('aria-current') === 'page' && !editing;
+      const open = selected ? controls.get(folder).children.hidden : true;
+      expand(folder, open);
+      state[folder.dataset.folder] = open;
+      save();
+      if (selected) event.preventDefault();
+    } else if (link.getAttribute('aria-current') === 'page' && !editing) {
+      event.preventDefault();
+    } else {
+      // Preserve the route exposed by a search when opening one of its results.
+      for (let ancestor = link.closest('li').parentElement.closest('li[data-folder]'); ancestor; ancestor = ancestor.parentElement.closest('li[data-folder]')) {
+        state[ancestor.dataset.folder] = true;
+      }
+      save();
+    }
+  });
+  function expandAll(open) {
+    filter.value = '';
+    try { sessionStorage.removeItem(storageKey + ':query'); } catch (_) {}
+    links.forEach(link => { link.closest('li').hidden = false; });
+    folders.forEach(folder => { state[folder.dataset.folder] = open; expand(folder, open); });
+    document.getElementById('projectbook-empty').hidden = links.length !== 0;
+    save();
+  }
+  document.getElementById('projectbook-expand').addEventListener('click', () => expandAll(true));
+  document.getElementById('projectbook-collapse').addEventListener('click', () => expandAll(false));
+  function applyFilter() {
+    try { sessionStorage.setItem(storageKey + ':query', filter.value); } catch (_) {}
+    const query = filter.value.trim().toLocaleLowerCase().replaceAll('_', ' ');
+    for (const link of links) {
+      const path = link.dataset.document || link.dataset.folderLink;
+      link.closest('li').hidden = !path.toLocaleLowerCase().replaceAll('_', ' ').includes(query);
+    }
+    for (const folder of folders.slice().reverse()) {
+      const ownMatch = !folder.hidden;
+      const childMatch = Array.from(controls.get(folder).children.children).some(child => !child.hidden);
+      folder.hidden = !ownMatch && !childMatch;
+      expand(folder, query ? childMatch : state[folder.dataset.folder] === true);
+    }
+    document.getElementById('projectbook-empty').hidden = Array.from(tree.querySelector(':scope > ul').children).some(item => !item.hidden);
+  }
+  filter.addEventListener('input', applyFilter);
+  try { filter.value = sessionStorage.getItem(storageKey + ':query') || ''; } catch (_) {}
+  if (filter.value) applyFilter();
+  // Arrow keys navigate currently visible rows; Enter follows links, Space toggles buttons.
+  tree.addEventListener('keydown', event => {
+    if (event.altKey || event.ctrlKey || event.metaKey) return;
+    const target = event.target.closest('a, button');
+    if (!target) return;
+    const row = target.closest('li');
+    const folder = row.hasAttribute('data-folder') ? row : null;
+    const visible = links.filter(link => !link.closest('[hidden]'));
+    const link = folder ? controls.get(folder).link : target;
+    let next;
+    if (event.key === 'ArrowDown') next = visible[visible.indexOf(link) + 1];
+    else if (event.key === 'ArrowUp') next = visible[visible.indexOf(link) - 1];
+    else if (event.key === 'ArrowRight' && folder) {
+      if (controls.get(folder).children.hidden) controls.get(folder).button.click();
+      else next = visible[visible.indexOf(link) + 1];
+    } else if (event.key === 'ArrowLeft') {
+      if (folder && !controls.get(folder).children.hidden) controls.get(folder).button.click();
+      else next = row.parentElement.closest('li[data-folder]')?.querySelector(':scope > .projectbook-tree-row > a');
+    } else return;
+    event.preventDefault();
+    next?.focus();
+  });
+  nav.style.visibility = 'visible';
+})();
+</script>

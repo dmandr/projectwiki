@@ -1,0 +1,23 @@
+name: ${PROJECTBOOK_INSTANCE:-projectbook-fork}
+services:
+  wiki:
+    build:
+      context: ..
+      dockerfile: projectbook/Dockerfile
+    image: ${PROJECTBOOK_IMAGE:-projectwiki:local}
+    init: true
+    ports:
+      - '127.0.0.1:${PROJECTBOOK_PORT:-4569}:4567'
+    volumes:
+      - type: bind
+        source: '${PROJECTBOOK_WIKI_DIR:-../../testwiki-projectwiki}'
+        target: /wiki
+        bind:
+          create_host_path: false
+    environment:
+      APP_ENV: production
+      GOLLUM_REF: '${GOLLUM_REF:-main}'
+      GOLLUM_READ_ONLY: '${GOLLUM_READ_ONLY:-false}'
+      GOLLUM_EDITOR: '${GOLLUM_EDITOR:-mdx}'
+      GOLLUM_TREE: '${GOLLUM_TREE:-true}'
+    restart: unless-stopped
