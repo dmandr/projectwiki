@@ -4,6 +4,7 @@ require 'securerandom'
 require 'time'
 require 'digest'
 require 'tempfile'
+require 'net/http'
 require 'gollum/projectbook_titles'
 
 module Gollum
@@ -181,6 +182,39 @@ module Gollum
     def document_write_allowed!
       raise Error.new('Document writes are disabled.', 403) unless @wiki.allow_editing && ENV.fetch('PROJECTBOOK_MCP_DOCUMENT_WRITE', 'true') == 'true'
       raise Error, 'Writes cannot use a historical snapshot.' unless revision == @head
+    end
+
+    def rag_request(endpoint, payload = nil)
+      base = ENV.fetch('PROJECTBOOK_RAG_URL', '')
+      raise Error.new('Experimental search is disabled.', 503) if base.empty?
+      uri = URI(base + endpoint)
+      request = payload ? Net::HTTP::Post.new(uri) : Net::HTTP::Get.new(uri)
+      if payload
+        request['Content-Type'] = 'application/json'
+        request.body = JSON.generate(payload)
+      end
+      response = Net::HTTP.start(uri.hostname, uri.port, nil, nil, open_timeout: 3, read_timeout: 60) { |http| http.request(request) }
+      raise Error.new('Experimental index is unavailable; use ordinary search or check index status.', 503) unless response.code == '200'
+      JSON.parse(response.body)
+    rescue IOError, SystemCallError, Timeout::Error, JSON::ParserError
+      raise Error.new('Experimental search is unavailable; ordinary search remains available.', 503)
+    end
+
+    def get_search_index_status
+      rag_request('/status')
+    end
+
+    def search_knowledge(query:, path: '', limit: 8, mode: 'hybrid')
+      path!(path, root: true)
+      result = rag_request('/search', {query: query, path: path, limit: limit, mode: mode})
+      current = entries.to_h { |entry| [entry[:path], entry[:sha]] }
+      result['current_revision'] = revision
+      result['stale'] = result['indexed_revision'] != revision
+      result.fetch('items').each do |item|
+        item['stale'] = current[item['path']] != item['sha']
+        item['url'] = item['type'] == 'pdf' ? @base_url + '/gollum/file/' + NavigationIndex.encode_path(item['path']) : url(item['path'])
+      end
+      result
     end
 
     def document_path!(path)

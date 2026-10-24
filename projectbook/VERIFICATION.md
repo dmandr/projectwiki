@@ -149,3 +149,13 @@
 - Rebuilt with `./projectbook/start.sh`; local container healthy at port 4569. Existing client configuration uses the same `/mcp` endpoint. Tool discovery now includes `save_document` and `edit_document`; a connected client may need to refresh its tool list.
 - Live HTTP smoke against disposable test-book page `playground/mcp-editing/version-check-20261024180154.md`: preview, create, browser save, rejected stale MCP replacement (412), MCP exact edit, rejected stale browser save (412), concurrent MCP edits (one success/one 412), current-version no-op without a commit, and rendered Web UI content all passed. No original documents modified; local book commits are expected for actual test saves.
 - This verifies saved-content concurrency in one app process. Unsaved browser drafts remain client-side; concurrent external Git writers/multiple app processes still need the planned synchronization/locking work.
+
+## Experimental retrieval — 2026-10-24
+
+- Existing MCP changes committed/pushed as `59eb67d8` before starting this experiment. RAG changes remain uncommitted for review.
+- Separate Compose deployment `projectbook-rag`, wiki/MCP at port 4570, book mounted read-only, no exposed Qdrant/indexer ports. Main 4569 deployment unchanged.
+- Full index: 130 input files; all Markdown and text from 24/29 PDFs; 9,773 chunks in 249.450 seconds, zero cache hits. AES and fallback Poppler resolved three initial PDF failures. Five files have no extractable text. Details: [benchmark](rag/BENCHMARK.md).
+- Cached regeneration: 2.094 seconds, 130 cache hits, no new embeddings. Semantic/hybrid/keyword latency measured separately; actual MCP scoped search with source versions/URLs/stale markers passed. Experimental write tools are absent.
+- Eight Python tests pass: committed Git reads, source chunk/token coverage, query validation, AES/blank PDF/fallback extraction, cache reuse/deletion, failed-index publication preserving old generation, query priority over indexing batches. Generation test uses temporary Git + in-memory Qdrant with synthetic vectors; real model/server behavior is checked separately on the deployed book.
+- Ruby regression suite: 24 tests, 279 assertions, no failures. Optional discovery leaves normal MCP unchanged; stale per-source flags and PDF URLs checked.
+- Stop/restart rollback check preserves generated volumes/book and leaves the main 4569 wiki reachable. `clean` is documented but deliberately not executed after the successful benchmark, to keep the ready-to-review index.

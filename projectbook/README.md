@@ -166,6 +166,10 @@ Open a saved document and use the printer icon in the shared header. It calls th
 
 Print styles remove navigation, search, breadcrumbs, action buttons and wiki header/sidebar/footer blocks. The rendered document title, text, tables and images remain. Large images are bounded to the printable area; table headers repeat across pages. Browser-generated URL/date headers and footers are controlled by the print dialog, independently of the page.
 
+### Optional experimental semantic search
+
+A separate read-only deployment at port 4570 adds local Qdrant/FastEmbed search over Markdown and extracted PDF text. See [experiment setup, limits and rollback](rag/README.md). It is off in the normal deployment; the existing literal search and MCP editing remain unchanged.
+
 ### MCP: book access and durable agent memory
 
 The local Streamable HTTP endpoint is `http://127.0.0.1:4569/mcp` (same container and port as the wiki). It uses the official Ruby SDK, pinned to `mcp 1.8.1`. No external model/API key or database is needed. It reads saved documents, writes agent notes, and creates/edits Markdown through the shared browser save service with optimistic version checks. It does **not** expose Move, uploads, deletion or Git push.
@@ -243,7 +247,7 @@ MCP runs in the same process and outer write lock as the Web UI. Document and me
 
 Limits: request 3 MiB; tool response 256 KiB; 100 results per page; Markdown text up to 2 MiB; reads up to 500 lines/40,000 characters; diffs up to 40,000 characters; memory content up to 20,000 characters and complete record up to 100 KB. Truncation/pagination are explicit. Source text is cached by blob SHA with a 32 MiB process-local bound. A changed blob is read again; no generated cache is committed.
 
-Not yet implemented: semantic/vector search, PDF text extraction/OCR, automatic summarisation, full task management, multi-document transactions, Move/attachments through MCP, or Git synchronization. A later RAG layer can combine lexical search and embeddings (e.g. [Qdrant hybrid queries](https://qdrant.tech/documentation/search/hybrid-queries/)); the vector index remains rebuildable, while authored summaries and notes live in Git. Model choice and any external transfer of book content need to be configured separately.
+Optional semantic/hybrid search and PDF text extraction are available in the separate [RAG experiment](rag/README.md). Not yet implemented: OCR, automatic summarisation, full task management, multi-document transactions, Move/attachments through MCP, or Git synchronization. The vector index remains rebuildable, while authored summaries and notes live in Git. Any external transfer of book content needs separate configuration.
 
 Tests (temporary repositories; not the user's book):
 

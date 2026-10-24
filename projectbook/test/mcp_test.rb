@@ -18,7 +18,7 @@ class ProjectbookMCPTest < Minitest::Test
     @client = Rack::MockRequest.new(Precious::App)
   end
   def teardown
-    %w[PROJECTBOOK_MCP_TOKEN PROJECTBOOK_MCP_MEMORY_WRITE PROJECTBOOK_MCP_DOCUMENT_WRITE PROJECTBOOK_MCP_ENABLED].each { |key| ENV.delete(key) }
+    %w[PROJECTBOOK_MCP_TOKEN PROJECTBOOK_MCP_MEMORY_WRITE PROJECTBOOK_MCP_DOCUMENT_WRITE PROJECTBOOK_MCP_ENABLED PROJECTBOOK_RAG_URL].each { |key| ENV.delete(key) }
     FileUtils.remove_entry(@dir)
   end
   def wiki; Gollum::Wiki.new(@dir, ref: 'main'); end
@@ -134,6 +134,26 @@ class ProjectbookMCPTest < Minitest::Test
     ENV.delete('PROJECTBOOK_MCP_TOKEN')
     invalid = JSON.parse(rpc('tools/call', {name: 'list_tree', arguments: {limit: 1000}}).body)
     assert invalid.dig('result', 'isError')
+  end
+  def test_experimental_search_discovery_staleness_and_pdf_urls
+    list = JSON.parse(rpc('tools/list').body).dig('result', 'tools')
+    refute list.any? { |t| t['name'] == 'search_knowledge' }
+    ENV['PROJECTBOOK_RAG_URL'] = 'http://rag:8090'
+    list = JSON.parse(rpc('tools/list').body).dig('result', 'tools')
+    assert list.any? { |t| t['name'] == 'search_knowledge' }
+    refute list.find { |t| t['name'] == 'search_knowledge' }.dig('inputSchema', 'properties').key?('revision')
+    book = Gollum::ProjectbookKnowledge.new(wiki, base_url: 'http://localhost:4570')
+    response = {'indexed_revision' => 'old', 'items' => [
+      {'path' => 'Home.md', 'sha' => wiki.page('Home').sha, 'type' => 'markdown'},
+      {'path' => 'manual.pdf', 'sha' => 'old', 'type' => 'pdf', 'page' => 2}]}
+    book.stub(:rag_request, response) do
+      result = book.search_knowledge(query: 'engine')
+      assert result['stale']; refute result['items'][0]['stale']; assert result['items'][1]['stale']
+      assert_equal 'http://localhost:4570/gollum/file/manual.pdf', result['items'][1]['url']
+    end
+    ENV.delete('PROJECTBOOK_RAG_URL')
+    error = assert_raises(Gollum::ProjectbookCreation::Error) { book.get_search_index_status }
+    assert_equal 503, error.status
   end
   def test_map_tree_search_read_history_and_snapshot
     map, error = tool('get_book_context'); refute error
