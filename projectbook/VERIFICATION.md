@@ -140,3 +140,12 @@
 - Through MCP, searched and read six relevant book documents, then saved a source-linked engine summary in agent memory. Read-back confirmed identical content and `stale: false`. Only the disposable book's memory received a commit; document content was unchanged.
 - Created a separate fresh Codex conversation without providing the note ID or summary contents. It successfully used native `mcp__projectbook__get_book_context`, `mcp__projectbook__list_agent_notes` and `mcp__projectbook__read_agent_note`, independently found the saved summary, reported six sources / `stale: false`, and recovered its conclusions. The verification conversation used no filesystem or HTTP fallback and made no writes.
 - Application changes remain uncommitted and unpushed. Summary content stays exclusively in the book repository, not in this public application repository.
+
+
+## MCP document writes — 2026-10-24
+
+- Previous MCP reading/memory stage committed as `52fd5874` on user approval; no push. Document-write changes remain uncommitted for review.
+- Combined isolated tests: `mcp_test.rb`, `editor_save_test.rb`, `navigation_index_test.rb` — 23 tests, 270 assertions, no failures. Covers preview/create/no-op, exact replacements including Unicode, ambiguous/missing matches and atomic failure, stale saves both directions through the browser HTTP route, uncommitted disk content, symlinks/reserved paths and read-only controls.
+- Rebuilt with `./projectbook/start.sh`; local container healthy at port 4569. Existing client configuration uses the same `/mcp` endpoint. Tool discovery now includes `save_document` and `edit_document`; a connected client may need to refresh its tool list.
+- Live HTTP smoke against disposable test-book page `playground/mcp-editing/version-check-20261024180154.md`: preview, create, browser save, rejected stale MCP replacement (412), MCP exact edit, rejected stale browser save (412), concurrent MCP edits (one success/one 412), current-version no-op without a commit, and rendered Web UI content all passed. No original documents modified; local book commits are expected for actual test saves.
+- This verifies saved-content concurrency in one app process. Unsaved browser drafts remain client-side; concurrent external Git writers/multiple app processes still need the planned synchronization/locking work.

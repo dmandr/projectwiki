@@ -168,7 +168,7 @@ Print styles remove navigation, search, breadcrumbs, action buttons and wiki hea
 
 ### MCP: book access and durable agent memory
 
-The local Streamable HTTP endpoint is `http://127.0.0.1:4569/mcp` (same container and port as the wiki). It uses the official Ruby SDK, pinned to `mcp 1.8.1`. No external model/API key or database is needed. This stage reads saved documents and can write agent notes; it does **not** expose document editing, uploads or Git push.
+The local Streamable HTTP endpoint is `http://127.0.0.1:4569/mcp` (same container and port as the wiki). It uses the official Ruby SDK, pinned to `mcp 1.8.1`. No external model/API key or database is needed. It reads saved documents, writes agent notes, and creates/edits Markdown through the shared browser save service with optimistic version checks. It does **not** expose Move, uploads, deletion or Git push.
 
 Connect a local Codex client:
 
@@ -198,6 +198,8 @@ Tools:
 | `get_diff` | Diff of one Markdown path at two reachable full commit SHAs. |
 | `list_agent_notes` | Find notes by scope or text, including inherited parent context and descendant notes. |
 | `read_agent_note` | Full note, version, sources and stale status. |
+| `save_document` | Create/replace complete Markdown with expected blob SHA; preview by default, explicit local commit. |
+| `edit_document` | Apply unique exact text replacements with expected blob SHA; preview by default. |
 | `save_agent_note` | Create/update durable summary, finding or task log; one local Git commit, no push. |
 
 Try asking: “Read the book map, find the engine documentation, compare its recent changes and summarise the relevant findings with links. Save the useful result as an agent note linked to the source versions.” Another session can ask: “Load saved findings for the engine section and check whether the sources have changed.” Search/work history is saved explicitly as a `task_log`, not by recording every query or the agent's private reasoning.
@@ -206,18 +208,42 @@ Agent notes are ordinary UTF-8 JSON files at `.projectbook/agent-memory/<uuid>.j
 
 The UUID is chosen by the caller and reused on retries. Create with `expected_version: ""`; update with the note's current `version`. Concurrent edits return a version conflict. Repeating identical content is a no-op. Memory files are excluded from the explorer/overview and Markdown document search; they are not secret or access-controlled separately from the book and remain visible in Git/history. Existing generic wiki file routes are not a confidentiality boundary. Git clone/push carries the notes along with the book.
 
+### Version-checked document editing
+
+1. Call `read_document` for the current path. Use its **`sha`**, not the repository `revision`, as `expected_version`. For a new file use an empty version and an explicit `.md` path.
+2. Preview `edit_document` with `edits: [{old_text, new_text}]`, or `save_document` with complete `content`. `dry_run` defaults to true. Each replacement must match exactly once; replacements apply sequentially and a failed match cancels the whole operation. For partial/truncated reads prefer exact edits; never replace the whole document with an excerpt.
+3. Review the returned `diff`, then repeat with `dry_run: false` and the **same expected version**. Preview does not reserve the document: saving validates it again.
+4. Successful writes return the resulting blob `version`, Git `commit`, `revision` and URL. Preview's `version` is only the proposed blob hash, not a saved version. Content without an H1 gains the same title as in the browser. Saving unchanged content with a current version creates no commit.
+
+Example after reading `hardware/engine.md`:
+
+```json
+{
+  "path": "hardware/engine.md",
+  "expected_version": "<sha from read_document>",
+  "edits": [{"old_text": "- [ ] Check coolant", "new_text": "- [x] Check coolant"}],
+  "dry_run": true,
+  "message": "Record coolant check"
+}
+```
+
+A newer save from the browser/agent returns an MCP tool error with status `412` (or `409` for a moved/deleted/occupied path or uncommitted disk changes), `current_version`, `current_revision`, and recovery guidance. Read again and reconcile the edits; simply substituting the new SHA would defeat the protection. Browser Save uses the same SHA check, so an older browser draft cannot overwrite an MCP save either. Unsaved browser drafts remain client-side; the server cannot read them. No automatic merge or force overwrite is offered.
+
+After a network failure with an unknown outcome, read the current document to determine whether the save succeeded. Retrying with a stale version is rejected, even if the supplied text is identical. Changes to other documents do not invalidate this document's blob version. An existing path cannot be overwritten by passing an empty version. Read-only flags remove tools from discovery and reject direct calls too.
+
 Deployment settings (export in ignored `projectbook/settings.local.sh`):
 
 - `PROJECTBOOK_MCP_ENABLED=false` disables the endpoint.
-- `PROJECTBOOK_MCP_MEMORY_WRITE=false` exposes only read tools; `GOLLUM_READ_ONLY=true` also removes memory writes.
+- `PROJECTBOOK_MCP_MEMORY_WRITE=false` disables agent-note writes.
+- `PROJECTBOOK_MCP_DOCUMENT_WRITE=false` disables document writes. Set both flags to false for read-only MCP, or use `GOLLUM_READ_ONLY=true` to disable writes in both MCP and Web UI.
 - `PROJECTBOOK_MCP_TOKEN` optionally requires `Authorization: Bearer ...`; leave credentials out of Git. For Codex, configure `bearer_token_env_var` with a token-bearing environment variable available to the client. Do not put a token into a URL.
 - The default test deployment binds only to Mac loopback and has no token. The SDK validates Host/Origin; arbitrary browser origins are rejected. Do not change the bind address to publish this test configuration.
 
-MCP runs in the same process and outer write lock as the Web UI. Memory writes therefore share the UI's serialization. This does not lock external Git commands/other processes; no concurrent external writers are supported yet. Read tools pin a Git revision and do not checkout old commits. Pass that revision to later pages of a result to keep a consistent snapshot. Only book-root deployments (`page_file_dir` empty) are supported in this first version.
+MCP runs in the same process and outer write lock as the Web UI. Document and memory writes therefore share the UI's validation/write serialization. This does not lock external Git commands/other processes; no concurrent external writers are supported yet. Read tools pin a Git revision and do not checkout old commits. Pass that revision to later pages of a result to keep a consistent snapshot. Only book-root deployments (`page_file_dir` empty) are supported in this first version.
 
-Limits: request 128 KiB; tool response 256 KiB; 100 results per page; Markdown text up to 2 MiB; reads up to 500 lines/40,000 characters; diffs up to 40,000 characters; memory content up to 20,000 characters and complete record up to 100 KB. Truncation/pagination are explicit. Source text is cached by blob SHA with a 32 MiB process-local bound. A changed blob is read again; no generated cache is committed.
+Limits: request 3 MiB; tool response 256 KiB; 100 results per page; Markdown text up to 2 MiB; reads up to 500 lines/40,000 characters; diffs up to 40,000 characters; memory content up to 20,000 characters and complete record up to 100 KB. Truncation/pagination are explicit. Source text is cached by blob SHA with a 32 MiB process-local bound. A changed blob is read again; no generated cache is committed.
 
-Not yet implemented: semantic/vector search, PDF text extraction/OCR, automatic summarisation, full task management, document writes through MCP, or Git synchronization. A later RAG layer can combine lexical search and embeddings (e.g. [Qdrant hybrid queries](https://qdrant.tech/documentation/search/hybrid-queries/)); the vector index remains rebuildable, while authored summaries and notes live in Git. Model choice and any external transfer of book content need to be configured separately.
+Not yet implemented: semantic/vector search, PDF text extraction/OCR, automatic summarisation, full task management, multi-document transactions, Move/attachments through MCP, or Git synchronization. A later RAG layer can combine lexical search and embeddings (e.g. [Qdrant hybrid queries](https://qdrant.tech/documentation/search/hybrid-queries/)); the vector index remains rebuildable, while authored summaries and notes live in Git. Model choice and any external transfer of book content need to be configured separately.
 
 Tests (temporary repositories; not the user's book):
 

@@ -50,7 +50,7 @@ module Gollum
       target
     end
 
-    def self.save(wiki, input, uploads, options)
+    def self.save(wiki, input, uploads, options, dry_run: false)
       raise Error, 'Invalid save request.' unless input.is_a?(Hash)
       target = path!(input['path'])
       source = path!(input.fetch('source_path', target))
@@ -87,7 +87,11 @@ module Gollum
         raise Error.new('Attachments exceed the limit: 20 MB per file, 50 MB per save.', 413) if temp.size > MAX_FILE || total > MAX_TOTAL
         [path, temp]
       end
-      return {path: target, commit: wiki.commit_for(wiki.ref).id} if source == target && page && page.text_data == content && prepared.empty? && input['create'] != true
+      unchanged = source == target && page && page.text_data == content && prepared.empty? && input['create'] != true
+      if dry_run
+        return {path: target, content: content, previous_content: input['create'] == true ? '' : page.text_data, unchanged: !!unchanged}
+      end
+      return {path: target, commit: wiki.commit_for(wiki.ref).id} if unchanged
       committer = Gollum::Committer.new(wiki, options)
       commit = {committer: committer, normalize: false}
       if input['create'] == true || source != target
