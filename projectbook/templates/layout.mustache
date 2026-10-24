@@ -150,6 +150,7 @@
       {{/projectbook_can_create}}
       <a class="btn btn-sm projectbook-tool" href="{{projectbook_history_url}}" title="History" aria-label="History">{{#octicon}}history{{/octicon}}</a>
       {{#projectbook_edit_url}}<a class="btn btn-sm projectbook-tool" href="{{projectbook_edit_url}}" title="Edit" aria-label="Edit">{{#octicon}}pencil{{/octicon}}</a>{{/projectbook_edit_url}}
+      {{#projectbook_printable}}<button type="button" class="btn btn-sm projectbook-tool" id="projectbook-print" title="Print" aria-label="Print"><svg aria-hidden="true" viewBox="0 0 20 20" style="fill:none;stroke:currentColor;stroke-width:1.5;stroke-linejoin:round"><path d="M5 7V2h10v5M5 14H2V7h16v7h-3M5 11h10v7H5Z"/><path d="M14 9h2"/></svg></button>{{/projectbook_printable}}
       {{#projectbook_rename}}<button type="button" class="btn btn-sm projectbook-tool minibutton-rename-page" title="Rename" aria-label="Rename">{{#octicon}}typography{{/octicon}}</button>{{/projectbook_rename}}
       {{#projectbook_attachment}}<a class="btn btn-sm projectbook-tool" href="{{raw_url}}" target="_blank" rel="noopener" title="Open original" aria-label="Open original">{{#octicon}}link-external{{/octicon}}</a>{{/projectbook_attachment}}
       <a class="btn btn-sm projectbook-tool" href="{{overview_path}}" title="All files" aria-label="All files">{{#octicon}}file-directory{{/octicon}}</a>

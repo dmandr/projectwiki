@@ -115,3 +115,11 @@
 - Removed the sidebar Find in tree field. Search documents in the header now filters the tree locally by title/path while typing; Enter/the search button submits the existing full-text search.
 - Query persists across navigation; a query in a search URL takes precedence over stored state. Escape/native clearing restores the tree. Expand all/Collapse all preserve the active query.
 - Browser verified a single search field, live Cyrillic-title filtering without navigation, Enter -> full-text results, filename/path filtering, filtered expand/collapse, query retained on opening a document, no-results state and Escape restoring the tree. Docker build/health and whitespace checks passed. No book writes, application commit or push in this step.
+
+## Print (2026-10-24, pending review)
+
+- Unified search was approved and committed as `8d3ed30d`; no push. Print changes remain uncommitted.
+- Added a document-only printer icon invoking `window.print()`. Print CSS removes the shared header/explorer, breadcrumbs, action forms, wiki header/sidebar/footer and modification footer, preserving rendered document content.
+- Docker rebuild and health check passed. Exported Home through Chromium's print-to-PDF and visually inspected all three pages: Cyrillic text, links, a large portrait photograph and table render without application panels. Initial photo splitting was fixed with a print-only height bound and preserved aspect ratio; the final photo fits on one page. Verification artifacts are outside this public repository.
+- The native Print click hit a browser-automation timeout; PDF rendering was independently verified using the browser's printing API. Physical printer output and the macOS system dialog were not verified. Browser URL/date headers are a user-controlled dialog option.
+- No book data was changed in this step.

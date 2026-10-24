@@ -73,5 +73,31 @@
     .projectbook-topbar .projectbook-tool { width: 28px; height: 30px; padding: 5px; }
     .projectbook-header-main form { gap: 3px; }
   }
-  @media print { :root { scrollbar-gutter: auto; } body.projectbook-tree-layout { display: block; } #projectbook-nav, .projectbook-topbar { display: none; } }
+  @page { margin: 16mm; }
+  @media print {
+    :root { scrollbar-gutter: auto; }
+    html, body.projectbook-tree-layout { display: block; min-height: 0; height: auto; overflow: visible; background: white !important; color: black; }
+    #projectbook-nav, .projectbook-topbar, dialog, #head, #footer,
+    #wiki-sidebar, #wiki-toc-main, #wiki-header, #wiki-footer,
+    #wiki-wrapper > form, nav.actions, .breadcrumb,
+    .markdown-body .anchor { display: none !important; }
+    .projectbook-content, .projectbook-content #wiki-wrapper, .projectbook-content #wiki-content,
+    .projectbook-content #wiki-body, .projectbook-content .main-content,
+    .projectbook-content .markdown-body {
+      display: block !important; float: none !important; width: auto !important; max-width: none !important;
+      min-width: 0 !important; margin: 0 !important; padding: 0 !important;
+      border: 0 !important; box-shadow: none !important; overflow: visible !important;
+      background: white !important; color: black !important;
+    }
+    #wiki-content > h1 { margin: 0 0 7mm !important; padding: 0 !important; text-align: left !important; font-size: 24pt; }
+    .projectbook-content .markdown-body { font-size: 11pt; line-height: 1.5; overflow-wrap: anywhere; }
+    .markdown-body h1, .markdown-body h2, .markdown-body h3, .markdown-body h4 { break-after: avoid; page-break-after: avoid; }
+    .markdown-body p, .markdown-body li { orphans: 3; widows: 3; }
+  .markdown-body img, .markdown-body svg { max-width: 100% !important; max-height: 230mm; height: auto; object-fit: contain; object-position: left center; break-inside: avoid; }
+    .markdown-body table { display: table; width: 100%; max-width: 100%; overflow-wrap: anywhere; }
+    .markdown-body thead { display: table-header-group; }
+    .markdown-body tr { break-inside: avoid; page-break-inside: avoid; }
+    .markdown-body pre { white-space: pre-wrap; overflow-wrap: anywhere; overflow: visible; }
+    .markdown-body a { color: inherit; text-decoration: underline; }
+  }
 </style>

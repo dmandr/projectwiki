@@ -63,6 +63,10 @@ module ProjectBookWorkspaceNavigation
     @page && @allow_editing && !projectbook_editing ? edit_path + '/' + @page.escaped_url_path : nil
   end
 
+  def projectbook_printable
+    self.class.name == 'Precious::Views::Page' && !!@page
+  end
+
   def projectbook_editing
     respond_to?(:is_edit_page) && is_edit_page
   end

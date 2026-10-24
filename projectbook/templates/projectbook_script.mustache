@@ -3,6 +3,7 @@
 (function () {
   const tree = document.getElementById('projectbook-tree');
   const filter = document.getElementById('projectbook-search');
+  document.getElementById('projectbook-print')?.addEventListener('click', () => window.print());
   const folders = Array.from(tree.querySelectorAll('li[data-folder]'));
   const links = Array.from(tree.querySelectorAll('a[data-document], a[data-folder-link]'));
   // New version deliberately ignores the prototype's initially-expanded state.

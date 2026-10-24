@@ -159,3 +159,9 @@ docker exec -i projectbook-fork-wiki-1 ruby - < projectbook/test/editor_save_tes
 - Проверки: `npm --prefix projectbook/editor test` и `docker exec -i projectbook-fork-wiki-1 ruby - < projectbook/test/titles_test.rb`.
 
 Confirming an unchanged Title leaves the Markdown bytes untouched, including inline formatting. The editor shows `No unsaved changes` or `Unsaved changes`; Undo back to the original content clears the indicator. Save remains available, including for legacy pages that need their missing H1 added.
+
+### Print
+
+Open a saved document and use the printer icon in the shared header. It calls the browser's native print dialog; choose a printer or Save as PDF. In macOS Safari, PDF options are in the system print dialog. The action is available in document view, not in the editor or directory listing.
+
+Print styles remove navigation, search, breadcrumbs, action buttons and wiki header/sidebar/footer blocks. The rendered document title, text, tables and images remain. Large images are bounded to the printable area; table headers repeat across pages. Browser-generated URL/date headers and footers are controlled by the print dialog, independently of the page.
