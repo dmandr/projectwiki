@@ -25,20 +25,47 @@ module Gollum
       end
     end
 
+    def self.destination!(wiki, target)
+      parts = target.split('/')
+      parts.each { |part| ProjectbookCreation.segment!(part) }
+      raise Error, 'Keep a Markdown file extension.' unless Gollum::Page.format_for(target) == :markdown
+      prefix = wiki.page_file_dir.to_s.sub(%r{/+\z}, '')
+      revision = wiki.commit_for(wiki.ref)&.id
+      paths = revision ? wiki.tree_map_for(revision).map { |entry| prefix.empty? ? entry.path : entry.path.delete_prefix(prefix + '/') } : []
+      ancestors = (1...parts.length).map { |length| parts.first(length).join('/') }
+      if paths.any? { |entry| entry.casecmp?(target) || entry.downcase.start_with?(target.downcase + '/') || ancestors.any? { |parent| entry.casecmp?(parent) } } || wiki.page(target)
+        raise Error.new('A file or folder already occupies this path.', 409)
+      end
+      disk = ::File.join(wiki.path, prefix)
+      parts.each_with_index do |part, index|
+        if ::File.directory?(disk) && ::Dir.children(disk).any? { |entry| entry.casecmp?(part) && entry != part }
+          raise Error.new('A path with different letter casing already exists.', 409)
+        end
+        disk = ::File.join(disk, part)
+        raise Error, 'Symbolic links cannot be used here.' if ::File.symlink?(disk)
+        if ::File.exist?(disk) && (index == parts.length - 1 || !::File.directory?(disk))
+          raise Error.new('This path already exists on disk.', 409)
+        end
+      end
+      target
+    end
+
     def self.save(wiki, input, uploads, options)
       raise Error, 'Invalid save request.' unless input.is_a?(Hash)
       target = path!(input['path'])
+      source = path!(input.fetch('source_path', target))
       content = input['content']
       raise Error, 'Invalid Markdown content.' unless content.is_a?(String) && content.bytesize <= 2 * 1024 * 1024
-      page = wiki.page(target)
+      content = ProjectbookTitles.ensure_title(content, source)
+      page = wiki.page(source)
       if input['create'] == true
-        parent = ::File.dirname(target); parent = '' if parent == '.'
-        target = ProjectbookCreation.prepare(wiki, 'document', parent, ::File.basename(target))
+        destination!(wiki, target)
       else
-        raise Error.new('The document was moved or deleted. Your draft is preserved.', 409) unless page && page.url_path == target
+        raise Error.new('The document was moved or deleted. Your draft is preserved.', 409) unless page && page.url_path == source
         raise Error.new('This document has changed. Your draft is preserved; compare with the latest version before saving.', 412) unless input['etag'] == page.sha
         raise Error, 'Only Markdown documents are supported here.' unless page.format == :markdown
-        disk_check!(wiki, target, page.text_data)
+        disk_check!(wiki, source, page.text_data)
+        destination!(wiki, target) if target != source
       end
       files = input.fetch('attachments', [])
       raise Error, 'Invalid attachments.' unless files.is_a?(Array) && files.length <= 30 && uploads.is_a?(Array) && files.length == uploads.length
@@ -60,11 +87,14 @@ module Gollum
         raise Error.new('Attachments exceed the limit: 20 MB per file, 50 MB per save.', 413) if temp.size > MAX_FILE || total > MAX_TOTAL
         [path, temp]
       end
-      return {path: target, commit: wiki.commit_for(wiki.ref).id} if page && page.text_data == content && prepared.empty? && input['create'] != true
+      return {path: target, commit: wiki.commit_for(wiki.ref).id} if source == target && page && page.text_data == content && prepared.empty? && input['create'] != true
       committer = Gollum::Committer.new(wiki, options)
       commit = {committer: committer, normalize: false}
-      if input['create'] == true
+      if input['create'] == true || source != target
         wiki.write_file(target, content, commit)
+        if input['create'] != true
+          wiki.delete_page(page, commit)
+        end
       else
         # Exact bytes from Markdown mode; opening and saving does not reformat it.
         committer.add(page.path, content)

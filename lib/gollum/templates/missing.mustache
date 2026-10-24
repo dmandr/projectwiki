@@ -1,0 +1,28 @@
+<div id="wiki-wrapper">
+  <h1>Document not found</h1>
+  <p>There is no document at <strong>/{{missing_path}}</strong>. Would you like to create it?</p>
+  <form id="projectbook-missing-form" data-path="{{missing_path}}">
+    <label for="projectbook-missing-title">Title</label>
+    <input class="form-control" id="projectbook-missing-title" value="{{missing_title}}" required maxlength="180">
+    <p>Creates this document and any missing folders, then opens the editor.</p>
+    <button class="btn" type="submit">Create and edit</button>
+    <a class="btn" href="{{base_url}}/gollum/overview">Cancel</a>
+    <p role="alert" id="projectbook-missing-error" hidden></p>
+  </form>
+</div>
+<script>
+(() => {
+  const form = document.getElementById('projectbook-missing-form');
+  form.addEventListener('submit', async event => {
+    event.preventDefault();
+    const button = form.querySelector('button'), error = document.getElementById('projectbook-missing-error');
+    button.disabled = true; error.hidden = true;
+    try {
+      const response = await fetch((window.baseUrl || '') + '/gollum/projectbook/new', {method:'POST', headers:{'Content-Type':'application/json','X-ProjectWiki-Request':'1'}, body:JSON.stringify({kind:'document', path:form.dataset.path, title:document.getElementById('projectbook-missing-title').value})});
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Could not create document.');
+      location.assign(result.url);
+    } catch (failure) { error.textContent = failure.message; error.hidden = false; button.disabled = false; }
+  });
+})();
+</script>

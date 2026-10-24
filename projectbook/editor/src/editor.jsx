@@ -8,6 +8,9 @@ import { MDXEditor, realmPlugin, addExportVisitor$, rootEditor$, viewMode$,
 import { $createRangeSelection, $setSelection, $getSelection, $isRangeSelection } from 'lexical';
 import { EditorView } from '@codemirror/view';
 import { draftStore } from './drafts';
+import { rebaseMarkdown } from './move-links.mjs';
+import { documentTitle, withDocumentTitle } from './document-title.mjs';
+import { titleFromPath } from './names.mjs';
 import { imageDimensionsPlugin, ImageToolbar } from './image-dimensions';
 import '@mdxeditor/editor/style.css';
 import './style.css';
@@ -42,15 +45,39 @@ if (document.getElementById('projectbook-editor-app')) {
     const [status, setStatus] = useState(''), [busy, setBusy] = useState(false);
     const [confirmDiscard, setConfirmDiscard] = useState(false);
     const [files, setFiles] = useState([]), [draft, setDraft] = useState(null);
+    const destination = useRef(path);
     const name = useRef(path.split('/').pop());
+    const [moveOpen, setMoveOpen] = useState(false), [movePath, setMovePath] = useState(path);
+    const moveDialog = useRef(null);
+    const openMove = () => { if (titleEditing && !applyTitle()) return; setMovePath(targetPath()); setStatus(''); setMoveOpen(true); };
+    React.useEffect(() => { window.projectbookRename = openTitle; return () => { delete window.projectbookRename; }; });
+    React.useEffect(() => { if (moveOpen) moveDialog.current?.showModal(); }, [moveOpen]);
     const [filename, setFilename] = useState(name.current);
-    React.useEffect(() => { document.title = (isNew ? 'New: ' : 'Edit: ') + filename; }, [filename]);
-    const targetPath = () => isNew ? [parent, name.current.trim()].filter(Boolean).join('/') : path;
+    const fallbackTitle = titleFromPath(filename);
+    const [headingTitle, setHeadingTitle] = useState(() => documentTitle(initial, ''));
+    const [hasTextChanges, setHasTextChanges] = useState(false);
+    const [titleEditing, setTitleEditing] = useState(false), [titleValue, setTitleValue] = useState('');
+    const titleInput = useRef(null);
+    const displayTitle = headingTitle || fallbackTitle || 'Untitled document';
+    const openTitle = () => { if (working.current) return; setTitleValue(documentTitle(current.current, fallbackTitle)); setTitleEditing(true); setStatus(''); };
+    React.useEffect(() => { if (titleEditing) { titleInput.current?.focus(); titleInput.current?.select(); } }, [titleEditing]);
+    React.useEffect(() => { document.title = (isNew ? 'New: ' : 'Edit: ') + displayTitle; }, [displayTitle]);
+    function applyTitle() {
+      try {
+        const next = withDocumentTitle(current.current, titleValue, fallbackTitle);
+        if (next === current.current) { setTitleEditing(false); setStatus(''); return true; }
+        current.current = next; ref.current.setMarkdown(next); setHeadingTitle(documentTitle(next, ''));
+        setHasTextChanges(next !== initial);
+        setTitleEditing(false); stashSoon(); setStatus('Title updated. Save to keep it. The file path is unchanged.'); return true;
+      } catch (error) { setStatus(error.message); titleInput.current?.focus(); return false; }
+    }
+
+    const targetPath = () => isNew ? [...destination.current.split('/').slice(0, -1), name.current.trim()].join('/') : path;
     const [summary, setSummary] = useState((isNew ? 'Created ' : 'Updated ') + path);
     const picker = useRef(null), container = useRef(null);
-    const dirty = () => current.current !== initial || pending.current.length > 0 || targetPath() !== path;
+    const dirty = () => (titleEditing && titleValue.trim() !== displayTitle) || current.current !== initial || pending.current.length > 0 || targetPath() !== path;
     window.projectbookEditorDirty = dirty;
-    const snapshot = () => ({ filename: name.current, content: current.current, files: pending.current.map(({url, ...file}) => file), etag: form.dataset.etag, saved: Date.now() });
+    const snapshot = () => ({ destination: destination.current, filename: name.current, content: current.current, files: pending.current.map(({url, ...file}) => file), etag: form.dataset.etag, saved: Date.now() });
     const stash = () => {
       clearTimeout(draftTimer.current);
       const data = snapshot();
@@ -64,15 +91,17 @@ if (document.getElementById('projectbook-editor-app')) {
     const change = (value, normalization) => {
       if (normalization) { normalized.current ??= value; return; }
       current.current = value === normalized.current ? initial : value;
+      setHasTextChanges(current.current !== initial);
+      setHeadingTitle(documentTitle(current.current, ''));
       stashSoon();
     };
     React.useEffect(() => {
       draftStore('get', draftKey).then(value => {
         // Migrate text drafts from the earlier editor without deleting the old copy.
         if (!value) { try { value = JSON.parse(localStorage.getItem('projectbook:mdx:draft:' + location.pathname)); } catch (_) {} }
-        if (value && (value.content !== initial || value.files?.length || (value.filename && value.filename !== name.current))) setDraft(value);
+        if (value && (value.content !== initial || value.files?.length || (value.filename && value.filename !== name.current) || (value.destination && value.destination !== path))) setDraft(value);
       }).catch(() => setStatus('Browser draft storage is unavailable. Keep this tab open until Save succeeds.'));
-      const warn = event => { if (!allowLeave.current && dirty()) { event.preventDefault(); event.returnValue = ''; } };
+      const warn = event => { if (!allowLeave.current && window.projectbookEditorDirty?.()) { event.preventDefault(); event.returnValue = ''; } };
       window.addEventListener('beforeunload', warn);
       return () => window.removeEventListener('beforeunload', warn);
     }, []);
@@ -80,8 +109,10 @@ if (document.getElementById('projectbook-editor-app')) {
       pending.current.forEach(file => URL.revokeObjectURL(file.url));
       pending.current = (draft.files || []).map(file => ({...file, url: URL.createObjectURL(file.blob)}));
       setFiles([...pending.current]);
+      if (isNew && draft.destination) destination.current = draft.destination;
       if (isNew && draft.filename) { name.current = draft.filename; setFilename(draft.filename); }
-      current.current = draft.content; ref.current.setMarkdown(draft.content);
+      current.current = draft.content; ref.current.setMarkdown(draft.content); setHeadingTitle(documentTitle(draft.content, ''));
+      setHasTextChanges(draft.content !== initial);
       setStatus(draft.etag !== form.dataset.etag ? 'Draft restored from an older version. Review Changes against the current document before saving.' : 'Draft and attachments restored.');
       setDraft(null); stashSoon();
     };
@@ -152,6 +183,7 @@ if (document.getElementById('projectbook-editor-app')) {
     };
     async function close(discard) {
       if (working.current) return;
+      if (!discard && titleEditing && !applyTitle()) return;
       try {
         clearTimeout(draftTimer.current);
         await queue.current.catch(() => {});
@@ -160,18 +192,21 @@ if (document.getElementById('projectbook-editor-app')) {
         allowLeave.current = true; location.assign(closeUrl);
       } catch (_) { setStatus('Could not store or discard the browser draft. Keep this tab open until Save succeeds.'); }
     }
-    async function save(event) {
+    async function save(event, requestedPath) {
       event?.preventDefault();
       if (working.current) return;
-      const savePath = targetPath();
+      if (titleEditing && !applyTitle()) return;
+      const savePath = requestedPath || targetPath();
       if (isNew && (!name.current.trim() || /[\\/]/.test(name.current) || !/\.md$/i.test(name.current.trim()))) { setStatus('Enter a Markdown filename ending in .md, without folder separators.'); return; }
       working.current = true; setBusy(true); setStatus('Preparing save…');
-      const content = current.current;
+      let content;
+      try { content = rebaseMarkdown(documentTitle(current.current, '') ? current.current : withDocumentTitle(current.current, fallbackTitle), path, savePath); }
+      catch (_) { working.current = false; setBusy(false); setStatus('Could not update relative links. Keep the current path and save your edits first.'); return; }
       // An undone/deleted insertion must not leave an orphan in the Git book.
-      const used = pending.current.filter(file => content.includes(file.source));
+      const used = pending.current.filter(file => current.current.includes(file.source));
       const data = new FormData();
-      data.append('document', JSON.stringify({path: savePath, content, create: isNew, etag: form.dataset.etag, attachments: used.map(file => ({path: file.path}))}));
-      data.append('message', summary === `Created ${path}` ? `Created ${savePath}` : summary || `Updated ${savePath}`);
+      data.append('document', JSON.stringify({path: savePath, source_path: path, content, create: isNew, etag: form.dataset.etag, attachments: used.map(file => ({path: file.path}))}));
+      data.append('message', !isNew && savePath !== path && summary === `Updated ${path}` ? `Move ${path} to ${savePath}` : summary === `Created ${path}` ? `Created ${savePath}` : summary || `Updated ${savePath}`);
       used.forEach(file => data.append('files[]', file.blob, file.name));
       try {
         await stash().catch(() => {});
@@ -218,9 +253,46 @@ if (document.getElementById('projectbook-editor-app')) {
       </DiffSourceToggleWrapper>})
     ], []);
     return <>
-      <h1 className="header-title">{filename || 'Untitled document'}</h1>
-      {isNew && <label className="pb-document-name">Document filename<input className="form-control" aria-label="Document filename" value={filename} disabled={busy}
-        onChange={event => { name.current = event.target.value; setFilename(event.target.value); stashSoon(); }}/><small>Saved as /{targetPath()}. The filename is separate from the document text.</small></label>}
+      <div className="pb-document-heading">
+        {titleEditing ? <div className="pb-title-editor">
+          <input ref={titleInput} className="form-control" aria-label="Document title" value={titleValue} disabled={busy}
+            onChange={event => setTitleValue(event.target.value)} onKeyDown={event => {
+              if (event.key === 'Enter') { event.preventDefault(); applyTitle(); }
+              if (event.key === 'Escape') { event.preventDefault(); setTitleEditing(false); }
+            }}/>
+          <button type="button" className="btn btn-sm" title="Apply title" aria-label="Apply title" disabled={busy} onClick={applyTitle}>✓</button>
+          <button type="button" className="btn btn-sm" title="Cancel title edit" aria-label="Cancel title edit" disabled={busy} onClick={() => setTitleEditing(false)}>×</button>
+        </div> : <h1 className="header-title"><button type="button" className="pb-title-button" title="Edit document title" aria-label="Edit document title" disabled={busy} onClick={openTitle}>{displayTitle}</button></h1>}
+        <button type="button" className="btn btn-sm" title="Rename title" aria-label="Rename title" disabled={busy} onClick={openTitle}>
+          <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="m15 4 5 5M4 20l5-1L21 7a2 2 0 0 0-5-5L4 14Z"/></svg>
+        </button>
+        <button type="button" className="btn btn-sm" title="Move" aria-label="Move" disabled={busy} onClick={openMove}>
+          <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M3 7h7l2 2h9v11H3ZM3 7V4h7l2 3M8 14h9m-3-3 3 3-3 3"/></svg>
+        </button>
+      </div>
+      <p className="pb-document-location">/{targetPath()}</p>
+      {titleEditing && <p className="pb-title-hint">The title is the first # heading in Markdown. The filename and URL stay unchanged. Enter to apply, Escape to cancel.</p>}
+      {moveOpen && <dialog ref={moveDialog} className="pb-move-dialog" aria-labelledby="pb-move-title"
+        onCancel={event => { if (busy) event.preventDefault(); else setMoveOpen(false); }}>
+        <h2 id="pb-move-title">Move document</h2>
+        <p>Current path: <strong>/{targetPath()}</strong></p>
+        <label>New document path<input autoFocus className="form-control" aria-label="New document path" value={movePath} disabled={busy}
+          onKeyDown={event => { if (event.key === 'Enter') event.preventDefault(); }} onChange={event => setMovePath(event.target.value)}/></label>
+        <p>New path: <strong>/{movePath.trim().replace(/^\//, '')}</strong></p>
+        <p>Use a full path from the book root, including the Markdown extension. Missing folders will be created.</p>
+        <p>{isNew ? 'This chooses where the document will be saved. Nothing is created until Save.' : 'The document and any unsaved edits will be saved together at the new path. The old file will be removed.'}</p>
+        <p>Relative links and images inside this document will be adjusted. Links from other documents are not changed.</p>
+        <div role="status" className="pb-editor-status">{status}</div>
+        <div className="pb-editor-actions">
+          <button type="button" className="btn" disabled={busy} onClick={() => setMoveOpen(false)}>Cancel</button>
+          <button type="button" className="btn btn-primary" disabled={busy || !movePath.trim() || movePath.trim().replace(/^\//, '') === targetPath()}
+            onClick={() => {
+              const next = movePath.trim().replace(/^\//, '');
+              if (isNew) { destination.current = next; name.current = next.split('/').pop(); setFilename(name.current); setMoveOpen(false); stashSoon(); }
+              else save(null, next);
+            }}>{isNew ? 'Use this path' : 'Save and move'}</button>
+        </div>
+      </dialog>}
       {draft && <div className="pb-draft-banner">A browser draft is available. <button type="button" className="btn btn-sm" disabled={busy} onClick={restore}>Restore draft</button></div>}
       <div className="pb-editor-actions">
         <button type="submit" className="btn btn-primary" disabled={busy}>Save</button>
@@ -235,7 +307,8 @@ if (document.getElementById('projectbook-editor-app')) {
         <button type="button" className="btn btn-sm" onClick={() => close(true)}>Discard draft</button>{' '}
         <button type="button" className="btn btn-sm" onClick={() => setConfirmDiscard(false)}>Keep editing</button>
       </div>}
-      <div className="pb-editor-status" role="status" aria-live="polite">{status}</div>
+      <div className="pb-editor-status" role="status" aria-live="polite">{status.startsWith('Title updated.') && !dirty() ? '' : status}</div>
+      <div className="pb-change-state" role="status">{hasTextChanges || dirty() ? 'Unsaved changes' : 'No unsaved changes'}</div>
       <div className="pb-content-label">Document content</div>
       <div id="projectbook-mdx" ref={container} aria-busy={busy}
         onKeyDown={event => {if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') save(event);}}

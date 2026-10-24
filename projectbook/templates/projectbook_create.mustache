@@ -6,6 +6,7 @@
     <select id="projectbook-create-folder" name="folder">{{#projectbook_folders}}<option value="{{value}}" {{#selected}}selected{{/selected}}>{{label}}</option>{{/projectbook_folders}}</select>
     <label for="projectbook-create-name">Name</label>
     <input id="projectbook-create-name" name="name" required maxlength="180" autocomplete="off">
+    <div id="projectbook-create-destination-row"><label for="projectbook-create-destination">Document path</label><input id="projectbook-create-destination" autocomplete="off" maxlength="1024"></div>
     <p id="projectbook-create-hint"></p>
     <p class="projectbook-create-path">Path: <output id="projectbook-create-path"></output></p>
     <p id="projectbook-create-error" role="alert" hidden></p>

@@ -1,11 +1,12 @@
 require 'cgi'
 require 'thread'
+require 'gollum/projectbook_titles'
 
 module Gollum
   # Navigation needs names, not Page/File objects (which can load large blobs).
   # The local branch tip is checked per request; no network operation is involved.
   module NavigationIndex
-    Entry = Struct.new(:path, :url_path, keyword_init: true) do
+    Entry = Struct.new(:path, :url_path, :title, :sha, keyword_init: true) do
       def name
         ::File.basename(path)
       end
@@ -46,12 +47,21 @@ module Gollum
           cached
         else
           prefix = wiki.page_file_dir.to_s.sub(%r{/+\z}, '')
+          previous = cached ? cached.entries.to_h { |item| [item.url_path, item] } : {}
           entries = revision ? wiki.tree_map_for(revision).filter_map do |entry|
             next unless Gollum::Page.valid_page_name?(entry.name) ||
               (!entry.name.start_with?('_') && !Gollum::Page.protected_files.include?(entry.name))
             path = entry.path.dup.freeze
             url = prefix.empty? ? path : path.delete_prefix(prefix + '/')
-            Entry.new(path: path, url_path: url.freeze).freeze
+            title = if previous[url]&.sha == entry.sha
+              previous[url].title
+            elsif Gollum::Page.format_for(url) == :markdown
+              page = wiki.page(url)
+              page ? ProjectbookTitles.title(page.text_data, url) : ProjectbookTitles.from_path(url)
+            else
+              ::File.basename(url)
+            end
+            Entry.new(path: path, url_path: url.freeze, title: title.freeze, sha: entry.sha).freeze
           end : []
           Snapshot.new(revision, entries)
         end

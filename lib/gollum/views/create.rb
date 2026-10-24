@@ -40,7 +40,8 @@ module Precious
 
       #QND - sets default template page if specified
       def content
-        @template_page
+        path = [@path, @name.to_s + @ext.to_s].compact.join('/')
+        Gollum::ProjectbookTitles.ensure_title(@template_page.to_s, path)
       end
 
       private

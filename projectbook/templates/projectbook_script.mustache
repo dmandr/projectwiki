@@ -1,3 +1,4 @@
+<script src="{{base_url}}/projectbook-editor/names.js"></script>
 <script>
 (function () {
   const tree = document.getElementById('projectbook-tree');
@@ -91,7 +92,7 @@
     const query = filter.value.trim().toLocaleLowerCase().replaceAll('_', ' ');
     for (const link of links) {
       const path = link.dataset.document || link.dataset.folderLink;
-      link.closest('li').hidden = !path.toLocaleLowerCase().replaceAll('_', ' ').includes(query);
+      link.closest('li').hidden = !(path + ' ' + link.textContent).toLocaleLowerCase().replaceAll('_', ' ').includes(query);
     }
     for (const folder of folders.slice().reverse()) {
       const ownMatch = !folder.hidden;
@@ -130,6 +131,7 @@
   // Renaming submits a separate form: never leave unsaved editor text behind.
   document.addEventListener('click', event => {
     if (!event.target.closest('.minibutton-rename-page')) return;
+    if (window.projectbookRename) { event.preventDefault(); event.stopImmediatePropagation(); window.projectbookRename(); return; }
     const editor = document.getElementById('gollum-editor-form');
     if (!editor) return;
     const body = document.getElementById('gollum-editor-body');
@@ -145,24 +147,43 @@
   if (!dialog) return;
   const form = document.getElementById('projectbook-create-form');
   const folderSelect = document.getElementById('projectbook-create-folder');
+  const defaultFolder = folderSelect.value;
   const nameInput = document.getElementById('projectbook-create-name');
+  const pathInput = document.getElementById('projectbook-create-destination');
+  const names = window.projectbookNames;
   const submit = document.getElementById('projectbook-create-submit');
   const error = document.getElementById('projectbook-create-error');
   let kind = 'document', busy = false;
-  function previewPath() {
-    let name = nameInput.value;
-    if (kind === 'document' && name && !name.endsWith('.md')) name += '.md';
-    document.getElementById('projectbook-create-path').textContent = '/' + [folderSelect.value, name].filter(Boolean).join('/');
+  function previewPath(resetFolder = false) {
+    const slug = names.slugFromTitle(nameInput.value);
+    const name = kind === 'document' ? (slug ? slug + '.md' : '') : nameInput.value;
+    const parent = resetFolder || kind === 'folder' ? folderSelect.value : pathInput.value.split('/').slice(0, -1).join('/');
+    pathInput.value = parent ? parent + '/' + name : name;
+    document.getElementById('projectbook-create-path').textContent = '/' + pathInput.value;
   }
   document.querySelectorAll('[data-create-kind]').forEach(button => button.addEventListener('click', () => {
+    folderSelect.querySelectorAll('[data-proposed]').forEach(option => option.remove());
+    folderSelect.value = defaultFolder;
     kind = button.dataset.createKind;
     document.getElementById('projectbook-create-title').textContent = kind === 'folder' ? 'New folder' : 'New document';
-    submit.textContent = kind === 'folder' ? 'Create folder' : 'Open editor';
-    document.getElementById('projectbook-create-hint').textContent = kind === 'folder' ? 'Creates an empty folder in the book.' : 'Markdown document. Nothing is saved until you click Save in the editor.';
-    nameInput.value = ''; error.hidden = true; previewPath(); dialog.showModal(); nameInput.focus();
+    submit.textContent = kind === 'folder' ? 'Create folder' : 'Create and edit';
+    document.querySelector('label[for="projectbook-create-name"]').textContent = kind === 'folder' ? 'Name' : 'Title';
+    document.getElementById('projectbook-create-destination-row').hidden = kind === 'folder';
+    document.getElementById('projectbook-create-hint').textContent = kind === 'folder' ? 'Creates an empty folder in the book.' : 'Title suggests a filename; editing the path generates a title. After creation, Title and Move work independently.';
+    nameInput.value = ''; error.hidden = true; previewPath(true); dialog.showModal(); nameInput.focus();
   }));
-  nameInput.addEventListener('input', previewPath);
-  folderSelect.addEventListener('change', previewPath);
+  nameInput.addEventListener('input', () => previewPath());
+  nameInput.addEventListener('blur', () => { if (kind === 'document') nameInput.value = names.titleFromInput(nameInput.value); });
+  pathInput.addEventListener('input', () => {
+    nameInput.value = names.titleFromPath(pathInput.value);
+    const parent = pathInput.value.replace(/^\/+/, '').split('/').slice(0, -1).join('/');
+    if (![...folderSelect.options].some(option => option.value === parent)) {
+      const option = new Option('/' + parent + ' (new)', parent); option.dataset.proposed = 'true'; folderSelect.add(option);
+    }
+    folderSelect.value = parent;
+    document.getElementById('projectbook-create-path').textContent = '/' + pathInput.value;
+  });
+  folderSelect.addEventListener('change', () => previewPath(true));
   document.getElementById('projectbook-create-cancel').addEventListener('click', () => { if (!busy) dialog.close(); });
   dialog.addEventListener('cancel', event => { if (busy) event.preventDefault(); });
   form.addEventListener('submit', async event => {
@@ -170,11 +191,14 @@
     if (busy) return;
     busy = true; submit.disabled = true; error.hidden = true;
     try {
-      const response = await fetch(baseUrl + '/gollum/projectbook/new', {method: 'POST', headers: {'Content-Type': 'application/json', 'X-ProjectWiki-Request': '1'}, body: JSON.stringify({kind, folder: folderSelect.value, name: nameInput.value})});
+      let destination = pathInput.value.replace(/^\/+/, '');
+      if (!/\.md$/i.test(destination)) destination += '.md';
+      const input = kind === 'document' ? {kind, title: names.titleFromInput(nameInput.value), path: destination} : {kind, folder: folderSelect.value, name: nameInput.value};
+      const response = await fetch(baseUrl + '/gollum/projectbook/new', {method: 'POST', headers: {'Content-Type': 'application/json', 'X-ProjectWiki-Request': '1'}, body: JSON.stringify(input)});
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result.error || 'Could not create: HTTP ' + response.status);
       // Expand the destination path on the next page without disturbing other branches.
-      const parts = folderSelect.value.split('/').filter(Boolean);
+      const parts = (kind === 'document' ? destination.split('/').slice(0, -1).join('/') : folderSelect.value).split('/').filter(Boolean);
       if (kind === 'folder') parts.push(nameInput.value);
       parts.forEach((_, index) => { state[parts.slice(0, index + 1).join('/')] = true; }); save();
       location.assign(result.url);

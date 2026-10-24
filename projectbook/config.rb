@@ -29,7 +29,7 @@ module ProjectBookEditorView
   end
 end
 Precious::Views::Layout.include(ProjectBookEditorView)
-if ENV.fetch('GOLLUM_EDITOR', 'mdx') == 'mdx'
+if ENV.fetch('GOLLUM_EDITOR', 'mdx') == 'mdx' || ENV.fetch('GOLLUM_TREE', 'true') == 'true'
   require 'rack/static'
   Precious::App.use Rack::Static, urls: ['/projectbook-editor'], root: '/experiment/editor/dist'
 end

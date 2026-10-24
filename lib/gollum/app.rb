@@ -15,6 +15,7 @@ require 'gollum'
 require 'gollum/assets'
 require 'gollum/navigation_index'
 require 'gollum/projectbook_creation'
+require 'gollum/projectbook_titles'
 require 'gollum/projectbook_save'
 
 # Requirements for loading the layout view:
@@ -23,6 +24,7 @@ require 'gollum/views/helpers/locale_helpers'
 require 'gollum/views/template_cascade'
 
 require 'gollum/views/layout'
+require 'gollum/views/missing'
 require 'gollum/views/attachment'
 require 'gollum/views/editable'
 require 'gollum/views/has_page'
@@ -191,6 +193,12 @@ module Precious
           input = JSON.parse(request.body.read(8193))
           raise Gollum::ProjectbookCreation::Error, 'Invalid request.' unless input.is_a?(Hash)
           wiki = wiki_new
+          if input['kind'] == 'document' && input.key?('title')
+            title = Gollum::ProjectbookTitles.input_title(input['title'])
+            target = Gollum::ProjectbookSave.path!(input['path'])
+            result = Gollum::ProjectbookSave.save(wiki, {'path' => target, 'create' => true, 'content' => Gollum::ProjectbookTitles.markdown_heading(title)}, [], commit_options.merge(message: "Create #{target}"))
+            next({url: @base_url + '/gollum/edit/' + Gollum::NavigationIndex.encode_path(result[:path])}.to_json)
+          end
           target = Gollum::ProjectbookCreation.prepare(wiki, input['kind'], input['folder'], input['name'])
           if input['kind'] == 'folder'
             wiki.write_file(target + '/.gitkeep', '', commit_options.merge(message: "Create folder #{target}"))
@@ -726,7 +734,10 @@ module Precious
       else
         if @allow_editing
           path = fullpath[-1] == '/' ? "#{fullpath}#{wiki.index_page}" : fullpath # Append default index page if no page name is supplied
-          redirect to("/gollum/create/#{clean_url(encodeURIComponent(path))}")
+          @missing_path = path.sub(%r{\A/+}, '')
+          @missing_path += '.md' unless Gollum::Page.format_for(@missing_path)
+          @missing_title = Gollum::ProjectbookTitles.from_path(@missing_path)
+          mustache :missing
         else
           return page_does_not_exist
         end

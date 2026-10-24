@@ -1,23 +1,30 @@
 # Focused regression checks; no git init/commit and no document writes.
 require 'minitest/autorun'
 require 'gollum-lib'
-require_relative '../../lib/gollum/navigation_index'
+require 'gollum/navigation_index'
 require_relative '../extensions/document_tree'
 
 class NavigationIndexTest < Minitest::Test
   Entry = Struct.new(:path) do
     def name; File.basename(path); end
+    def sha; path; end
   end
   class Wiki
     attr_accessor :revision, :paths
-    attr_reader :calls, :path, :ref, :page_file_dir
+    attr_reader :calls, :path, :ref, :page_file_dir, :page_reads
     def initialize(prefix = nil)
       @path, @ref, @page_file_dir = "/fixture-#{object_id}", 'main', prefix
       @revision, @paths, @calls = 'first', ['Home.md', 'folder/a.md', 'folder/photo.jpg', 'big.pdf'], 0
+      @page_reads = 0
     end
     def commit_for(_); Struct.new(:id).new(revision); end
     def tree_map_for(_); @calls += 1; paths.map { |p| Entry.new(p) }; end
     def tree_list; raise 'Must never load page/file blobs for navigation'; end
+    def page(path)
+      raise 'Must not load media blobs' unless path.end_with?('.md')
+      @page_reads += 1
+      Struct.new(:text_data).new('# Display title')
+    end
   end
 
   def test_reuses_index_until_local_ref_changes_including_rewind
@@ -43,6 +50,18 @@ class NavigationIndexTest < Minitest::Test
     assert_equal 'first', snapshot.tree_html('') { 'first' }
     assert_equal 'first', snapshot.tree_html('') { raise 're-rendered' }
     assert_equal 'nested', snapshot.tree_html('/wiki') { 'nested' }
+  end
+
+  def test_unchanged_markdown_is_not_read_again_after_another_commit
+    wiki = Wiki.new
+    Gollum::NavigationIndex.for(wiki)
+    assert_equal 2, wiki.page_reads
+    wiki.revision = 'second'
+    wiki.paths << 'another.md'
+    snapshot = Gollum::NavigationIndex.for(wiki)
+    assert_equal 3, wiki.page_reads
+    assert_equal 'Display title', snapshot.entries.first.title
+    assert_equal 'photo.jpg', snapshot.entries.find { |entry| entry.name == 'photo.jpg' }.title
   end
 
   def test_page_directory_urls_and_protected_files

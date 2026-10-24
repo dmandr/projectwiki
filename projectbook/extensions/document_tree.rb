@@ -10,7 +10,7 @@ module ProjectBookDocumentTree
         parts = entry.url_path.split('/')
         leaf = parts.pop
         folder = parts.inject(root) { |node, part| (node[part] ||= { children: {} })[:children] }
-        folder[leaf] = { path: entry.url_path } unless leaf == '.gitkeep'
+        folder[leaf] = { path: entry.url_path, title: entry.title } unless leaf == '.gitkeep'
       end
       @projectbook_folder_number = 0
       projectbook_render_nodes(root)
@@ -23,7 +23,7 @@ module ProjectBookDocumentTree
     nodes.sort_by { |name, node| [node[:children] ? 0 : 1, name.downcase] }.map do |name, node|
       path = [parent, name].reject(&:empty?).join('/')
       escaped_path = CGI.escapeHTML(path)
-      label = CGI.escapeHTML(name)
+      label = CGI.escapeHTML(node[:title] || name)
       encoded = Gollum::NavigationIndex.encode_path(path)
       if node[:children]
         @projectbook_folder_number += 1

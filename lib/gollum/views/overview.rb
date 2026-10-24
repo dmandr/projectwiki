@@ -55,11 +55,11 @@ module Precious
               files_and_folders << {name: folder_name, icon: rocticon('file-directory-fill'), type: 'dir', url: folder_url, is_file: false}
             elsif !HIDDEN_PATHS.include?(result_path)
               file_url = Gollum::Page.valid_page_name?(result.filename) ? page_route(result.escaped_url_path) : page_route('gollum/file/' + result.escaped_url_path)
-              files_and_folders << {name: result.filename, icon: rocticon('file'), type: 'file', url: file_url, file_path: result.escaped_url_path, is_file: true}
+              files_and_folders << {name: result.respond_to?(:title) ? result.title : result.filename, icon: rocticon('file'), type: 'file', url: file_url, file_path: result.escaped_url_path, is_file: true}
             end
           end
           # 1012: Overview should list folders first, followed by files and pages sorted alphabetically
-          files_and_folders.uniq{|f| f[:name]}.sort_by!{|f| [f[:type], f[:name]]}
+          files_and_folders.uniq{|f| f[:url]}.sort_by!{|f| [f[:type], f[:name]]}
         else
           []
         end

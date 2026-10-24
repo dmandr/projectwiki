@@ -81,3 +81,31 @@
 - A second browser scenario inserted an image via Insert image into the middle of BeforeAfter. Visual and Markdown show Before, image and After as separate paragraphs. Undo restores BeforeAfter; Redo restores the image and paragraphs. Inline Discard confirmation returned to the folder and did not save that document.
 - Save API tests: 6 tests / 31 assertions; creation tests: 4 tests / 32 assertions; all passed in the Docker container. Original user test page and prototype instances were left untouched.
 - This closes the editor review fixes. Print remains the next small standalone task, followed by TODO; neither is implemented here. Application commit explicitly authorized by the user; no push.
+
+## Full-path Rename / Move (2026-10-24, pending review)
+
+- Added title-adjacent icon and full-path confirmation to MDXEditor; the shared Rename button opens it too. New pages can choose a different destination before Save; existing pages save edits, attachments and move in one commit. New folders are created on demand.
+- Save integration: 9 tests / 64 assertions passed, including move + edits + binary in one commit, old path removal, stale-source refusal, duplicate paths, traversal, symlinks, file-as-parent, case collisions and local work preservation. Existing creation tests: 4 / 32 passed. Three Node tests cover Markdown rebasing, references, nested linked images, fragments, spaces, unchanged source and code/frontmatter preservation. Docker build with npm ci passed.
+- Browser created a test document under a new destination, rejected a move onto Home.md without losing edits, then moved the document to a deeper directory with pending text changes. HTML image width 23% and Markdown links remained valid. Fixed void-element serialization, then verified move back/up and down again, reopening in Visual, HTML anchor text/destination preservation and Cancel without writing.
+- Test data is confined to playground/Move check in the disposable book. Both toolbar Rename and title Rename / Move were exercised. No application commit or push for this step. Incoming links/redirects and nonstandard URL locations remain explicitly outside this change.
+
+## Separate title editing and Move (2026-10-24, pending review)
+
+- Clicking the editor title or its pencil icon opens an inline field. Rename now updates the leading Markdown H1, preserving the filename and URL; Move remains a separate full-path dialog. Save also applies an open title field. Enter applies locally; Escape cancels.
+- Eight Node tests passed: five title tests (leading/setext H1, frontmatter, body preservation, literal Markdown characters and invalid input), plus three existing link-rebasing tests. Frontend and Docker builds passed.
+- Browser verified click-to-edit, Enter, Escape cancellation, separate Move path and Cancel, title-only Save and Save with the title field still open. Reopening showed the saved heading; the file path and image stayed unchanged. Test saves only affected the disposable playground/Move check document. No application commit or push.
+
+## Title/path creation and navigation (2026-10-24, pending review)
+
+- New document now asks for Title and offers an editable full path. Lowercase hyphen/underscore input becomes a readable title; title-to-path suggestions use lowercase ASCII, hyphens, Russian transliteration and Latin accent folding. Editing the full path generates a title and updates the selected folder. Explicit existing paths are not migrated.
+- Create and edit saves an initial Markdown H1 and opens the existing editor. Missing document URLs show a confirmation instead of entering the editor immediately; GET and Cancel do not create files. Missing parent folders are created with the document. Rename and Move remain independent after creation.
+- Page headings, the tree, directory lists, search result names and history scope labels use the document H1, with a humanized basename fallback. A missing H1 is added on Save. Legacy frontmatter remains before the H1. Actual paths stay in breadcrumbs/tooltips. Duplicate titles do not hide separate documents.
+- Checks passed: 9 Node tests; title/creation integration 5 tests / 32 assertions; save integration 9 / 64; previous creation 4 / 32; navigation cache 6 / 34. The navigation tests verify unchanged Markdown is not reread on an unrelated commit and media is not loaded for titles. Warm localhost Home response measured about 60 ms (server response only).
+- Browser verified filename-like Title, manual nested path -> Title, create -> editor, missing URL -> confirmation -> creation, Rename -> unchanged URL with refreshed tree/directory labels, and Russian title -> Latin filename while retaining the selected directory. Test data is under playground/title-rules in the disposable book. Docker is healthy. Application remains uncommitted and unpushed.
+
+## Unchanged-title confirmation (2026-10-24, approved for commit)
+
+- Confirming the displayed title is a no-op, including formatting/setext headings, surrounding field whitespace and filename-derived fallback titles. It does not call editor replacement, create a draft, or show Title updated. Real title changes still use normal saving.
+- Added No unsaved changes / Unsaved changes status. Returning to the original content clears the state; an outdated Title updated message is hidden when there are no changes.
+- Ten Node tests passed. Browser verified unchanged Apply, Save without changing the document's latest Git commit, body edit -> Unsaved changes -> Undo -> No unsaved changes. Existing Ruby integration/cache checks from the preceding rounds remain applicable. Local Docker deployment is healthy.
+- User explicitly approved committing the completed Title/path/Move work after this fix. No push requested.

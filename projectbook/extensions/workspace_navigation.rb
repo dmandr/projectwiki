@@ -55,7 +55,7 @@ module ProjectBookWorkspaceNavigation
     wiki = @page ? @page.wiki : Gollum::Wiki.new(Precious::App.gollum_path, Precious::App.wiki_options)
     [{label: 'Entire book', url: latest_changes_path, selected: !@page}] +
       Gollum::NavigationIndex.for(wiki).entries.select { |entry| Gollum::Page.valid_page_name?(entry.filename) }.sort_by(&:url_path).map do |entry|
-        {label: entry.url_path, url: history_path + '/' + entry.escaped_url_path, selected: @page && entry.url_path == @page.url_path}
+        {label: "#{entry.title} — #{entry.url_path}", url: history_path + '/' + entry.escaped_url_path, selected: @page && entry.url_path == @page.url_path}
       end
   end
 

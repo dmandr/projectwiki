@@ -88,4 +88,47 @@ class EditorSaveTest < Minitest::Test
     assert_equal before, head
     refute File.exist?(File.join(@dir, @target))
   end
+  def test_move_and_edits_and_attachments_are_one_commit
+    before = head
+    input = payload.merge(source_path: 'Home.md', path: 'Archive/2026/Renamed.md')
+    response = save(input)
+    assert_equal 200, response.status, response.body
+    assert_equal before, wiki.commit_for('main').parent.id
+    assert_nil wiki.page('Home.md')
+    refute File.exist?(File.join(@dir, 'Home.md'))
+    assert_equal input[:content], File.read(File.join(@dir, input[:path]))
+    assert_equal "%PDF-1.4\x00\xff".b, File.binread(File.join(@dir, @target))
+    after = head
+    assert_equal 409, save(input).status
+    assert_equal after, head
+  end
+  def test_move_rejects_conflict_invalid_path_local_work_and_stale_source
+    wiki.write_page('Occupied', :markdown, 'Keep', message: 'Fixture')
+    FileUtils.mkdir_p(File.join(@dir, 'Local'))
+    File.write(File.join(@dir, 'Local/Keep.md'), 'Uncommitted')
+    File.symlink(@dir, File.join(@dir, 'Alias'))
+    before = head
+    {'Occupied.md' => 409, 'Local/Keep.md' => 409, 'Home.md/child.md' => 409,
+     '../Escape.md' => 422, '.git/Config.md' => 422, 'Alias/Copy.md' => 422,
+     'home.md' => 409, 'Document.txt' => 422}.each do |target, status|
+      response = save(payload.merge(source_path: 'Home.md', path: target))
+      assert_equal status, response.status, "#{target}: #{response.body}"
+      assert_equal before, head
+    end
+    response = save(payload.merge(source_path: 'Home.md', path: 'Archive/New.md', etag: 'stale'))
+    assert_equal 412, response.status
+    File.write(File.join(@dir, 'Home.md'), 'Local edit')
+    assert_equal 409, save(payload.merge(source_path: 'Home.md', path: 'Archive/New.md')).status
+    assert_equal before, head
+    assert_equal 'Uncommitted', File.read(File.join(@dir, 'Local/Keep.md'))
+    refute File.exist?(File.join(@dir, @target))
+  end
+  def test_new_document_can_use_a_new_nested_path
+    response = save(payload.merge(create: true, source_path: 'Original.md', path: 'New/Deep/Document.md'))
+    assert_equal 200, response.status, response.body
+    assert wiki.page('New/Deep/Document.md')
+    refute wiki.page('Original.md')
+    assert_equal "# Home\n", wiki.page('Home.md').text_data
+  end
+
 end

@@ -75,7 +75,7 @@ GOLLUM_READ_ONLY=true ./projectbook/start.sh
 - Каталог книги на Mac: Markdown, медиа и `.git`, подключённые в `/wiki`. Остановка, пересборка и удаление контейнера не меняют их.
 - Браузер: Markdown и несохранённые вложения в IndexedDB. Черновики не синхронизируются между браузерами и могут быть потеряны при очистке данных сайта.
 
-Собственная база данных и Git LFS для этого стенда не нужны. Нажатие Save в Web UI создаёт локальный commit **книги**; это не commit исходников приложения. Автоматического push/pull нет. При проверке deployment агент не сохраняет тестовые правки и не делает commits.
+Собственная база данных и Git LFS для этого стенда не нужны. Нажатие Save в Web UI создаёт локальный commit **книги**; это не commit исходников приложения. Автоматического push/pull нет. Проверки UI могут создавать локальные коммиты одноразовой тестовой книги; исходники приложения коммитятся только после подтверждения пользователя.
 
 ## Сборка и текущие ограничения
 
@@ -107,9 +107,9 @@ Images and PDF files selected in the tree or folder list open in an attachment p
 
 ## Shared header and creation
 
-The header is shared by document, folder, attachment, editor, search and history screens: Home (ProjectBook), content search and one row of icon-only actions with accessible names and tooltips. New document / New folder, History, Edit and All files share the search row. A compact breadcrumb strip sits below it without horizontal separators. The explorer and document body no longer duplicate these controls. Rename is available in the header while editing; unsaved body/header/footer/sidebar text must be saved before renaming. Upload/Download are removed from the common toolbar; attachments offer Open original. The single History button opens book-wide changes from Home and global screens, or the selected document’s history elsewhere. Both history screens are titled History and offer a History of selector for Entire book or any Markdown/document page. Theme selection and richer directory metadata are separate upcoming work.
+The header is shared by document, folder, attachment, editor, search and history screens: Home (ProjectBook), content search and one row of icon-only actions with accessible names and tooltips. New document / New folder, History, Edit and All files share the search row. A compact breadcrumb strip sits below it without horizontal separators. The explorer and document body no longer duplicate these controls. Rename is available while editing. In MDXEditor, clicking the title or Rename edits the leading Markdown heading without changing the file path. The separate Move icon opens full-path confirmation; pending edits are saved together with the move. The legacy Ace editor still requires saving edits before its stock rename. Upload/Download are removed from the common toolbar; attachments offer Open original. The single History button opens book-wide changes from Home and global screens, or the selected document’s history elsewhere. Both history screens are titled History and offer a History of selector for Entire book or any Markdown/document page. Theme selection and richer directory metadata are separate upcoming work.
 
-Both creation dialogs show a selectable existing destination folder and the resulting path. A selected document/attachment defaults to its parent; a directory defaults to itself. A document opens the existing MDXEditor and is committed to the book only on Save. Closing a new document returns to the parent folder; the existing browser draft mechanism remains available. A folder is committed through Gollum with a hidden `.gitkeep` marker and immediately appears in the index/tree.
+Both creation dialogs show a selectable existing destination folder and the resulting path. A selected document/attachment defaults to its parent; a directory defaults to itself. New document asks for Title and offers an editable path. Create and edit creates the Markdown H1 in one book commit and opens MDXEditor; later content changes use Save. A folder is committed through Gollum with a hidden `.gitkeep` marker and immediately appears in the index/tree.
 
 The creation endpoint requires the same-origin UI JSON request header, respects read-only mode, rejects reserved/traversal paths and symlinks, and reports collisions without overwriting files. POST operations in this app process are serialized, including stock saves/uploads. This is not synchronization with external Git writers or other instances. Save-time duplicate document creation now returns HTTP 409 so the editor retains its text.
 
@@ -123,7 +123,7 @@ docker run --rm --entrypoint ruby -e RUBYLIB=/src/lib \
 ## Редактор и вложения
 
 - Markdown редактируется напрямую в MDXEditor: Visual / Markdown / Changes, без загрузки Ace и его старой формы. Для других форматов или `GOLLUM_EDITOR=ace` остаётся штатный редактор.
-- При создании документа имя видно в заголовке и редактируется в Document filename до Save; путь показан отдельно от Document content. Имя и вложения восстанавливаются вместе с браузерным черновиком. Для сохранённой страницы используется Rename в верхней панели.
+- Клик по заголовку или Rename открывает поле для первого `# Заголовка` в Markdown. Имя файла и URL не меняются. Enter/галочка применяют изменение в редакторе, Escape/крестик отменяют; Save записывает его вместе с документом. Без H1 показывается имя файла без расширения. Отдельная кнопка Move меняет полный путь, включая имя файла; для новой страницы путь выбирается до Save. Применённый заголовок, путь и вложения сохраняются в браузерном черновике.
 - Перетащите файлы в текст либо используйте Attach files. PNG/JPEG/GIF/WebP/AVIF вставляются изображениями; PDF и другие файлы — ссылками. Работают несколько файлов и вставка файлов из буфера обмена.
 - До Save вложения находятся только в браузере. Save отправляет документ и используемые вложения одним запросом и создаёт один Git-коммит. Пути `uploads/<UUID>/<filename>` исключают перезапись одноимённых файлов; ссылки в Markdown относительные. Удалённые из текста новые вложения не публикуются.
 - Ограничения: 20 MiB на файл, 50 MiB и 30 файлов за сохранение, Markdown до 2 MiB. Есть прогресс загрузки, сообщение ошибки и возможность повторить Save. При конфликте версии правки остаются в браузере; автоматического merge пока нет.
@@ -131,7 +131,7 @@ docker run --rm --entrypoint ruby -e RUBYLIB=/src/lib \
 - Размер картинки хранится прямо в Markdown: `<img src="../../uploads/.../photo.png" alt="Photo" width="23%" />`. При выборе картинки появляется панель Original / 25% / 50% / 75% / 100%, поле для произвольного процента (включая дробный) или числа пикселей, Apply. Панель скрывается при клике вне картинки, Escape или Apply. Стрелки вверх/влево переводят курсор перед выбранной картинкой, вниз/вправо и Enter — после неё; при необходимости создаётся абзац. При изменении ширины высота автоматически сохраняет пропорции. Внешние Markdown-просмотрщики с поддержкой HTML смогут отрисовать этот формат; запрещающие HTML просмотрщики могут его скрыть.
 - Вставляемые изображения отделяются от соседнего текста абзацами, в том числе через Insert image. Визуальное редактирование приводит смешанные абзацы с изображениями к блочному виду.
 - Markdown без размеров остаётся обычным `![alt](path)`. Для HTML `<img>` используется собственный импорт/экспорт MDXEditor, чтобы проценты не превращались в пиксели, а относительные адреса сохранялись. Форк MDXEditor не нужен.
-- Документы с HTML-комментариями/старой wiki-разметкой открываются в Markdown. Неподдерживаемый визуальным парсером синтаксис требует работы в исходнике. Визуальные правки могут нормализовать списки/таблицы; проверяйте Changes. Открытие и Save без изменений не создают коммит.
+- Документы с HTML-комментариями/старой wiki-разметкой открываются в Markdown. Неподдерживаемый визуальным парсером синтаксис требует работы в исходнике. Визуальные правки могут нормализовать списки/таблицы; проверяйте Changes. Открытие само не меняет файлы. Save без изменений не создаёт коммит, кроме добавления отсутствующего H1 по правилу Title.
 - Записи сериализуются внутри одного процесса приложения. Внешние Git-записи и синхронизация нескольких экземпляров остаются отдельным этапом.
 
 Проверки API на одноразовых репозиториях внутри работающего контейнера:
@@ -139,3 +139,23 @@ docker run --rm --entrypoint ruby -e RUBYLIB=/src/lib \
 ```sh
 docker exec -i projectbook-fork-wiki-1 ruby - < projectbook/test/editor_save_test.rb
 ```
+
+### Заголовок и Move
+
+- Нажмите Move и укажите полный путь от корня книги, например `Archive/2026/Notes.md`; новые каталоги создаются при сохранении. Имя должно сохранять Markdown-расширение.
+- Для новой страницы Use this path выбирает путь, а запись происходит по Save. Для существующей Save and move подтверждает старый/новый путь и сохраняет несохранённый текст, используемые вложения и перенос одним Git-коммитом. Cancel ничего не записывает.
+- Проверяются исходная версия, занятые пути, локальные несохранённые файлы, символические ссылки и коллизии регистра. При ошибке текст остаётся в редакторе.
+- Внутри переносимого документа пересчитываются относительные Markdown-ссылки, изображения, reference definitions и HTML `src`/`href`. Код и frontmatter не меняются. HTML-картинки сохраняют совместимый с MDX вид `<img ... />`.
+- Входящие ссылки из других страниц и wiki-синтаксис `[[...]]` не переписываются; редиректы не создаются. Произвольные URL в CSS, `srcset` и метаданных тоже требуют отдельной проверки. История содержимого остаётся в Git; автоматическое обнаружение переименования в History зависит от сходства содержимого до и после правок.
+- Проверка преобразования ссылок: `npm --prefix projectbook/editor test`.
+
+### Title и путь при создании
+
+- `engine-check` / `engine_check` в поле Title превращаются в `Engine Check`; обычный введённый текст сохраняет свой регистр. Из Title предлагается имя с маленькими латинскими буквами и дефисами: `Проверка двигателя` → `proverka-dvigatelya.md`. Явно введённый путь сохраняется; менять существующие пути массово не требуется.
+- Изменение Document path генерирует Title из последнего компонента пути. Изменение Title обновляет имя в выбранном каталоге. Путь виден до подтверждения; одинаковые имена не перезаписываются. При создании отсутствующие каталоги добавляются автоматически.
+- Открытие отсутствующего адреса показывает Document not found с полным путём и предлагаемым Title. Только Create and edit создаёт файл; GET и Cancel не записывают данные.
+- Новые документы начинаются с `# Title`. Первый H1 определяет название в редакторе, просмотре, дереве, списке каталога, поиске и выборе истории. Без H1 название генерируется из имени файла; при следующем сохранении H1 добавляется. Существующий YAML/TOML frontmatter сохраняется перед H1, чтобы не ломать метаданные старых документов. Открытие само не меняет файлы.
+- После создания Title и путь независимы: Rename меняет H1, Move меняет путь. Breadcrumb и подсказки показывают настоящий путь; одинаковые Title допустимы. Индекс названий обновляется по Git SHA; неизменённые файлы повторно не разбираются.
+- Проверки: `npm --prefix projectbook/editor test` и `docker exec -i projectbook-fork-wiki-1 ruby - < projectbook/test/titles_test.rb`.
+
+Confirming an unchanged Title leaves the Markdown bytes untouched, including inline formatting. The editor shows `No unsaved changes` or `Unsaved changes`; Undo back to the original content clears the indicator. Save remains available, including for legacy pages that need their missing H1 added.

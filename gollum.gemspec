@@ -68,6 +68,9 @@ Gem::Specification.new do |s|
     docker-run.sh
     gollum.gemspec
     lib/gollum.rb
+    lib/gollum/projectbook_titles.rb
+    lib/gollum/views/missing.rb
+    lib/gollum/templates/missing.mustache
     lib/gollum/app.rb
     lib/gollum/assets.rb
     lib/gollum/navigation_index.rb

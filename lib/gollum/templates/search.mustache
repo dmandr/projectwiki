@@ -17,7 +17,7 @@
   {{#results}}
     <li class="Box-row Box-row--gray search-result">
       <span class="Counter Counter--primary tooltipped tooltipped-w" aria-label="{{filename_count}} hits in filename - {{count}} hits in content">{{filename_count}} - {{count}}</span>&nbsp;
-      <span class="text-bold"><a href="{{href}}">{{name}}</a></span>
+      <span class="text-bold"><a href="{{href}}" title="{{name}}">{{display_title}}</a></span>
       <button
         class="btn-link tooltipped tooltipped-w float-right toggle-context"
         aria-label="{{t.aria.show_all}}"

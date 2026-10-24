@@ -15,7 +15,11 @@ module Precious
           end
           [a[:filename_count], a[:count]] <=> [b_filename_count, b_count]
         end.reverse.slice((@page_num - 1) * @max_count, @max_count)
-        sorted.each {|x| x[:href] = page_route(x[:name])}
+        wiki = Gollum::Wiki.new(Precious::App.gollum_path, Precious::App.wiki_options)
+        sorted.map do |result|
+          page = wiki.page(result[:name])
+          result.merge(href: page_route(result[:name]), display_title: page && page.format == :markdown ? Gollum::ProjectbookTitles.title(page.text_data, page.url_path) : result[:name])
+        end
       end
 
       def query_string
