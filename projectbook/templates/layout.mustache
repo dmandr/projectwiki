@@ -142,7 +142,7 @@
 <header class="projectbook-topbar">
   <div class="projectbook-header-main">
     <a class="projectbook-home" href="{{base_url}}/Home">ProjectBook</a>
-    <form action="{{search_path}}" method="get" role="search"><input type="search" name="q" aria-label="Search documents" placeholder="Search documents…" value="{{query}}"><button class="btn btn-sm projectbook-tool" type="submit" title="Search documents" aria-label="Search documents">{{#octicon}}search{{/octicon}}</button></form>
+    <form action="{{search_path}}" method="get" role="search"><input id="projectbook-search" type="search" name="q" aria-label="Search documents" placeholder="Search documents…" title="Filter the tree by title or path. Press Enter to search document contents." autocomplete="off" value="{{query}}"><button class="btn btn-sm projectbook-tool" type="submit" title="Search document contents" aria-label="Search documents">{{#octicon}}search{{/octicon}}</button></form>
     <nav class="projectbook-header-actions" aria-label="Document actions">
       {{#projectbook_can_create}}
         <button class="btn btn-sm projectbook-tool" type="button" data-create-kind="document" title="New document" aria-label="New document">{{#octicon}}file-added{{/octicon}}</button>
@@ -160,8 +160,7 @@
 </header>
 <noscript><style>#projectbook-nav { visibility: visible !important; }</style></noscript>
 <aside id="projectbook-nav" aria-label="Project explorer" style="visibility:hidden">
-  <label for="projectbook-filter">Explorer</label>
-  <input id="projectbook-filter" type="search" placeholder="Find in tree…" autocomplete="off">
+  <div class="projectbook-explorer-label">Explorer</div>
   <div class="projectbook-tree-actions"><button type="button" id="projectbook-expand">Expand all</button><button type="button" id="projectbook-collapse">Collapse all</button></div>
   <nav id="projectbook-tree" aria-label="File tree"><ul>{{{projectbook_tree_html}}}</ul></nav>
   <p id="projectbook-empty" hidden>No results</p>

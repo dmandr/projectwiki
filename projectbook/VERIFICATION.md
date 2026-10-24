@@ -109,3 +109,9 @@
 - Added No unsaved changes / Unsaved changes status. Returning to the original content clears the state; an outdated Title updated message is hidden when there are no changes.
 - Ten Node tests passed. Browser verified unchanged Apply, Save without changing the document's latest Git commit, body edit -> Unsaved changes -> Undo -> No unsaved changes. Existing Ruby integration/cache checks from the preceding rounds remain applicable. Local Docker deployment is healthy.
 - User explicitly approved committing the completed Title/path/Move work after this fix. No push requested.
+
+## Unified search field (2026-10-24, pending review)
+
+- Removed the sidebar Find in tree field. Search documents in the header now filters the tree locally by title/path while typing; Enter/the search button submits the existing full-text search.
+- Query persists across navigation; a query in a search URL takes precedence over stored state. Escape/native clearing restores the tree. Expand all/Collapse all preserve the active query.
+- Browser verified a single search field, live Cyrillic-title filtering without navigation, Enter -> full-text results, filename/path filtering, filtered expand/collapse, query retained on opening a document, no-results state and Escape restoring the tree. Docker build/health and whitespace checks passed. No book writes, application commit or push in this step.

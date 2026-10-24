@@ -2,7 +2,7 @@
 <script>
 (function () {
   const tree = document.getElementById('projectbook-tree');
-  const filter = document.getElementById('projectbook-filter');
+  const filter = document.getElementById('projectbook-search');
   const folders = Array.from(tree.querySelectorAll('li[data-folder]'));
   const links = Array.from(tree.querySelectorAll('a[data-document], a[data-folder-link]'));
   // New version deliberately ignores the prototype's initially-expanded state.
@@ -78,8 +78,10 @@
     }
   });
   function expandAll(open) {
-    filter.value = '';
-    try { sessionStorage.removeItem(storageKey + ':query'); } catch (_) {}
+    if (filter.value.trim()) {
+      folders.filter(folder => !folder.hidden).forEach(folder => expand(folder, open));
+      return;
+    }
     links.forEach(link => { link.closest('li').hidden = false; });
     folders.forEach(folder => { state[folder.dataset.folder] = open; expand(folder, open); });
     document.getElementById('projectbook-empty').hidden = links.length !== 0;
@@ -103,8 +105,14 @@
     document.getElementById('projectbook-empty').hidden = Array.from(tree.querySelector(':scope > ul').children).some(item => !item.hidden);
   }
   filter.addEventListener('input', applyFilter);
-  try { filter.value = sessionStorage.getItem(storageKey + ':query') || ''; } catch (_) {}
-  if (filter.value) applyFilter();
+  filter.addEventListener('search', applyFilter);
+  filter.addEventListener('keydown', event => {
+    if (event.key === 'Escape') { event.preventDefault(); filter.value = ''; applyFilter(); }
+  });
+  const requestedQuery = new URL(location.href).searchParams;
+  if (requestedQuery.has('q')) filter.value = requestedQuery.get('q');
+  else { try { filter.value = sessionStorage.getItem(storageKey + ':query') || ''; } catch (_) {} }
+  applyFilter();
   // Arrow keys navigate currently visible rows; Enter follows links, Space toggles buttons.
   tree.addEventListener('keydown', event => {
     if (event.altKey || event.ctrlKey || event.metaKey) return;
