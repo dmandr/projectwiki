@@ -118,5 +118,61 @@
     next?.focus();
   });
   nav.style.visibility = 'visible';
+  // Renaming submits a separate form: never leave unsaved editor text behind.
+  document.addEventListener('click', event => {
+    if (!event.target.closest('.minibutton-rename-page')) return;
+    const editor = document.getElementById('gollum-editor-form');
+    if (!editor) return;
+    const body = document.getElementById('gollum-editor-body');
+    const changedBody = body && (window.ace_editor?.getValue() ?? body.value) !== body.defaultValue;
+    const changedExtras = Array.from(editor.querySelectorAll('textarea[name=header], textarea[name=footer], textarea[name=sidebar]')).some(field => field.value !== field.defaultValue);
+    const notice = document.getElementById('projectbook-action-notice');
+    if (changedBody || changedExtras) {
+      event.preventDefault(); event.stopImmediatePropagation();
+      notice.textContent = 'Save your changes before renaming this document.'; notice.hidden = false;
+    } else { notice.hidden = true; }
+  }, true);
+  const dialog = document.getElementById('projectbook-create-dialog');
+  if (!dialog) return;
+  const form = document.getElementById('projectbook-create-form');
+  const folderSelect = document.getElementById('projectbook-create-folder');
+  const nameInput = document.getElementById('projectbook-create-name');
+  const submit = document.getElementById('projectbook-create-submit');
+  const error = document.getElementById('projectbook-create-error');
+  let kind = 'document', busy = false;
+  function previewPath() {
+    let name = nameInput.value;
+    if (kind === 'document' && name && !name.endsWith('.md')) name += '.md';
+    document.getElementById('projectbook-create-path').textContent = '/' + [folderSelect.value, name].filter(Boolean).join('/');
+  }
+  document.querySelectorAll('[data-create-kind]').forEach(button => button.addEventListener('click', () => {
+    kind = button.dataset.createKind;
+    document.getElementById('projectbook-create-title').textContent = kind === 'folder' ? 'New folder' : 'New document';
+    submit.textContent = kind === 'folder' ? 'Create folder' : 'Open editor';
+    document.getElementById('projectbook-create-hint').textContent = kind === 'folder' ? 'Creates an empty folder in the book.' : 'Markdown document. Nothing is saved until you click Save in the editor.';
+    nameInput.value = ''; error.hidden = true; previewPath(); dialog.showModal(); nameInput.focus();
+  }));
+  nameInput.addEventListener('input', previewPath);
+  folderSelect.addEventListener('change', previewPath);
+  document.getElementById('projectbook-create-cancel').addEventListener('click', () => { if (!busy) dialog.close(); });
+  dialog.addEventListener('cancel', event => { if (busy) event.preventDefault(); });
+  form.addEventListener('submit', async event => {
+    event.preventDefault();
+    if (busy) return;
+    busy = true; submit.disabled = true; error.hidden = true;
+    try {
+      const response = await fetch(baseUrl + '/gollum/projectbook/new', {method: 'POST', headers: {'Content-Type': 'application/json', 'X-ProjectWiki-Request': '1'}, body: JSON.stringify({kind, folder: folderSelect.value, name: nameInput.value})});
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || 'Could not create: HTTP ' + response.status);
+      // Expand the destination path on the next page without disturbing other branches.
+      const parts = folderSelect.value.split('/').filter(Boolean);
+      if (kind === 'folder') parts.push(nameInput.value);
+      parts.forEach((_, index) => { state[parts.slice(0, index + 1).join('/')] = true; }); save();
+      location.assign(result.url);
+    } catch (failure) {
+      error.textContent = failure instanceof TypeError ? 'No server confirmation. Check Files before retrying; a folder may already have been created.' : failure.message;
+      error.hidden = false;
+    } finally { busy = false; submit.disabled = false; }
+  });
 })();
 </script>

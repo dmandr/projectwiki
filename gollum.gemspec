@@ -71,6 +71,7 @@ Gem::Specification.new do |s|
     lib/gollum/app.rb
     lib/gollum/assets.rb
     lib/gollum/navigation_index.rb
+    lib/gollum/projectbook_creation.rb
     lib/gollum/helpers.rb
     lib/gollum/locales/cn.yml
     lib/gollum/locales/en.yml

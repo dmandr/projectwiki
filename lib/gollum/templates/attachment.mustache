@@ -1,11 +1,7 @@
 <div id="wiki-wrapper" class="projectbook-attachment">
-  <nav class="projectbook-attachment-actions" aria-label="Attachment actions">
-    <a class="btn btn-sm" href="{{folder_url}}">Back to folder</a>
-    <a class="btn btn-sm" href="{{raw_url}}" target="_blank" rel="noopener">Open original</a>
-    <a class="btn btn-sm" href="{{raw_url}}" download>Download</a>
-  </nav>
+  {{>navbar}}
   <h1>{{title}}</h1>
   {{#image}}<img class="projectbook-image-preview" src="{{raw_url}}" alt="{{title}}">{{/image}}
   {{#pdf}}<object class="projectbook-pdf-preview" data="{{raw_url}}" type="application/pdf"><p>PDF preview is not available. <a href="{{raw_url}}" target="_blank" rel="noopener">Open the PDF</a>.</p></object>{{/pdf}}
-  {{#other}}<p>This file does not have an inline preview. Use Download or Open original.</p>{{/other}}
+  {{#other}}<p>This file does not have an inline preview. Use Open original to view or download it.</p>{{/other}}
 </div>

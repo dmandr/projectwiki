@@ -41,7 +41,7 @@ module Precious
 
 
       def files_folders
-        if has_results
+        unless @results.empty?
           files_and_folders = []
 
           @results.each do |result|
@@ -60,16 +60,18 @@ module Precious
           end
           # 1012: Overview should list folders first, followed by files and pages sorted alphabetically
           files_and_folders.uniq{|f| f[:name]}.sort_by!{|f| [f[:type], f[:name]]}
+        else
+          []
         end
       end
 
 
       def has_results
-        !@results.empty?
+        !files_folders.empty?
       end
 
       def no_results
-        @results.empty?
+        files_folders.empty?
       end
 
       def latest_changes

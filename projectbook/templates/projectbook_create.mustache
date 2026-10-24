@@ -1,0 +1,15 @@
+{{#projectbook_can_create}}
+<dialog id="projectbook-create-dialog" aria-labelledby="projectbook-create-title">
+  <form id="projectbook-create-form">
+    <h2 id="projectbook-create-title">New document</h2>
+    <label for="projectbook-create-folder">Folder</label>
+    <select id="projectbook-create-folder" name="folder">{{#projectbook_folders}}<option value="{{value}}" {{#selected}}selected{{/selected}}>{{label}}</option>{{/projectbook_folders}}</select>
+    <label for="projectbook-create-name">Name</label>
+    <input id="projectbook-create-name" name="name" required maxlength="180" autocomplete="off">
+    <p id="projectbook-create-hint"></p>
+    <p class="projectbook-create-path">Path: <output id="projectbook-create-path"></output></p>
+    <p id="projectbook-create-error" role="alert" hidden></p>
+    <div class="projectbook-dialog-actions"><button type="button" class="btn" id="projectbook-create-cancel">Cancel</button><button type="submit" class="btn btn-primary" id="projectbook-create-submit">Open editor</button></div>
+  </form>
+</dialog>
+{{/projectbook_can_create}}

@@ -1,0 +1,6 @@
+<div class="projectbook-history-scope">
+  <label for="projectbook-history-scope">History of</label>
+  <select id="projectbook-history-scope" onchange="window.location.assign(this.value)">
+    {{#projectbook_history_options}}<option value="{{url}}" {{#selected}}selected{{/selected}}>{{label}}</option>{{/projectbook_history_options}}
+  </select>
+</div>

@@ -102,4 +102,20 @@ docker run --rm --entrypoint ruby -e RUBYLIB=/src/lib \
 ```
 
 
-Images and PDF files selected in the tree or folder list open in an attachment preview with the sidebar retained. `Open original` opens the raw file separately; `Download` offers the original file. Raw asset URLs remain unchanged so embedded media still work. Other attachments show download/open actions. Directory headings use the folder name; the root is called `Files`.
+Images and PDF files selected in the tree or folder list open in an attachment preview with the sidebar retained. `Open original` in the header opens the raw file separately for viewing/downloading. Raw asset URLs remain unchanged so embedded media still work. Other attachments use the same Open original action. Directory headings use the folder name; the root is called `Files`.
+
+
+## Shared header and creation
+
+The header is shared by document, folder, attachment, editor, search and history screens: Home (ProjectBook), content search and one row of icon-only actions with accessible names and tooltips. New document / New folder, History, Edit and All files share the search row. A compact breadcrumb strip sits below it without horizontal separators. The explorer and document body no longer duplicate these controls. Rename is available in the header while editing; unsaved body/header/footer/sidebar text must be saved before renaming. Upload/Download are removed from the common toolbar; attachments offer Open original. The single History button opens book-wide changes from Home and global screens, or the selected document’s history elsewhere. Both history screens are titled History and offer a History of selector for Entire book or any Markdown/document page. Theme selection and richer directory metadata are separate upcoming work.
+
+Both creation dialogs show a selectable existing destination folder and the resulting path. A selected document/attachment defaults to its parent; a directory defaults to itself. A document opens the existing MDXEditor and is committed to the book only on Save. Closing a new document returns to the parent folder; the existing browser draft mechanism remains available. A folder is committed through Gollum with a hidden `.gitkeep` marker and immediately appears in the index/tree.
+
+The creation endpoint requires the same-origin UI JSON request header, respects read-only mode, rejects reserved/traversal paths and symlinks, and reports collisions without overwriting files. POST operations in this app process are serialized, including stock saves/uploads. This is not synchronization with external Git writers or other instances. Save-time duplicate document creation now returns HTTP 409 so the editor retains its text.
+
+Focused checks (temporary repositories inside a disposable container, not the mounted book):
+
+```sh
+docker run --rm --entrypoint ruby -e RUBYLIB=/src/lib \
+  -v "$PWD:/src:ro" projectwiki:local /src/projectbook/test/creation_test.rb
+```

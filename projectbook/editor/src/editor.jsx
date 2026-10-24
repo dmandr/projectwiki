@@ -106,7 +106,11 @@ window.jQuery(() => {
     event.preventDefault(); event.stopImmediatePropagation();
     if (!stash()) return;
     dirty = false; window.onbeforeunload = null;
-    location.assign(pageUrl.href);
+    const parent = form.elements.path.value.replace(/^\/+|\/+$/g, '');
+    const cancelUrl = document.getElementById('gollum-editor').classList.contains('create')
+      ? (window.baseUrl || '') + '/gollum/overview/' + parent.split('/').map(encodeURIComponent).join('/') + '/'
+      : pageUrl.href;
+    location.assign(cancelUrl);
   }, true);
   async function save(event) {
     event.preventDefault(); event.stopImmediatePropagation();

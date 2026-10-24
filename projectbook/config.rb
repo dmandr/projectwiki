@@ -31,3 +31,6 @@ end
 if ENV.fetch('GOLLUM_TREE', 'true') == 'true' || ENV.fetch('GOLLUM_EDITOR', 'mdx') == 'mdx'
   Precious::App.wiki_options[:template_dir] = File.join(__dir__, 'templates')
 end
+
+require_relative 'extensions/workspace_navigation'
+Precious::Views::Layout.include(ProjectBookWorkspaceNavigation)

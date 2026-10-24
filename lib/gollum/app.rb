@@ -14,6 +14,7 @@ require 'pathname'
 require 'gollum'
 require 'gollum/assets'
 require 'gollum/navigation_index'
+require 'gollum/projectbook_creation'
 
 # Requirements for loading the layout view:
 require 'gollum/views/helpers'
@@ -83,6 +84,7 @@ module Precious
   class App < Sinatra::Base
     register Mustache::Sinatra
     register Sinatra::Namespace
+    use Gollum::ProjectbookCreation::WriteLock
     include Precious::Helpers
 
     Encoding.default_external = "UTF-8"
@@ -163,6 +165,31 @@ module Precious
     end
 
     namespace '/gollum' do
+      post '/projectbook/new' do
+        content_type :json
+        halt 403, {error: 'This request must come from the wiki interface.'}.to_json unless request.env['HTTP_X_PROJECTWIKI_REQUEST'] == '1'
+        halt 415, {error: 'Expected JSON.'}.to_json unless request.media_type == 'application/json'
+        begin
+          input = JSON.parse(request.body.read(8193))
+          raise Gollum::ProjectbookCreation::Error, 'Invalid request.' unless input.is_a?(Hash)
+          wiki = wiki_new
+          target = Gollum::ProjectbookCreation.prepare(wiki, input['kind'], input['folder'], input['name'])
+          if input['kind'] == 'folder'
+            wiki.write_file(target + '/.gitkeep', '', commit_options.merge(message: "Create folder #{target}"))
+            destination = '/gollum/overview/' + Gollum::NavigationIndex.encode_path(target) + '/'
+          else
+            destination = '/gollum/create/' + Gollum::NavigationIndex.encode_path(target)
+          end
+          {url: @base_url + destination}.to_json
+        rescue JSON::ParserError
+          halt 422, {error: 'Invalid JSON.'}.to_json
+        rescue Gollum::ProjectbookCreation::Error => e
+          halt e.status, {error: e.message}.to_json
+        rescue Gollum::DuplicatePageError, Gollum::IllegalDirectoryPath
+          halt 409, {error: 'The path changed or already exists. Reload and try again.'}.to_json
+        end
+      end
+
       get '/file/*' do
         fullpath = params[:splat].first
         halt 400 if fullpath.split('/').include?('..')
@@ -421,6 +448,7 @@ module Precious
 
           redirect to("/#{clean_url(::File.join(encodeURIComponent(path), encodeURIComponent(wiki.page_file_name(name, format))))}")
         rescue Gollum::DuplicatePageError, Gollum::IllegalDirectoryPath => e
+          status 409
           @message = e.message
           mustache :error
         end

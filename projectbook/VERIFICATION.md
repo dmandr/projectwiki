@@ -41,3 +41,23 @@
 - Replaced the fixed, independently scrolling sidebar with a two-column grid in document flow. The taller column determines page height; narrow screens stack both sections without a sidebar height limit.
 - Reserved a stable root scrollbar gutter (with an always-scroll fallback for older browsers). Removed obsolete sidebar scroll persistence.
 - Rebuilt and deployed the healthy local Docker instance on port 4569. Browser checked collapsed/expanded boat, Expand all, scrolling over the long tree, and Collapse all: only the page scrolls and the column boundary remains stable. PNG preview remains in the right column. No document writes, commits or pushes.
+
+
+## Shared header and creation (2026-10-24, pending review)
+
+- Deployed the common Home/search/Recent changes/Files header, breadcrumbs and contextual actions. Replaced ambiguous New with New document / New folder above the explorer. No theme or metadata implementation in this step.
+- Browser created `playground/UI demo` and `Welcome.md` using the UI. Empty-folder marker remains hidden. Cancelling the new document returned to its folder with only the marker present and no document commit. Saving created the document and its tree entry; content renders correctly. Repeating the name reports a conflict in the dialog. Search finds the saved page; attachment previews retain the common header and their Open original/Download actions.
+- Creation integration tests use disposable `/tmp` repositories: folder commit, Unicode/space paths, document preflight without writes, duplicate names, missing parent, traversal/reserved names, missing request header, read-only mode, untracked files and symlinks. Save-time duplicate creation returns 409 without changing HEAD/content. Four tests / 32 assertions passed. Navigation regression suite: five tests / 30 assertions passed.
+- UI smoke-test commits exist only in the disposable independent book on 4569. Original testwiki and ports 4567/4568 were not modified. Application HEAD remains `aa30d625`; no application commit or push.
+
+## Header layout refinement (2026-10-24)
+
+- Moved New document / New folder, document History/Edit and attachment Open original into the shared header, using built-in Octicons plus English labels/tooltips. Breadcrumbs are in its second row; removed duplicate body/sidebar action bars and common Upload/Download.
+- Rename appears only while editing. Added the standard rename form on edit screens and a capture guard for unsaved body/header/footer/sidebar content. Internal unnamed MDXEditor textareas are excluded.
+- Browser verified Home layout, header creation dialog/cancel, History navigation, attachment actions, Rename blocked with changed text, available after Undo, and successful no-op rename form submission. No test document content was saved in this round. Docker is healthy; JavaScript syntax and whitespace checks passed. App changes remain uncommitted and unpushed.
+
+## Compact icons and unified History (2026-10-24)
+
+- Header actions are icon-only with title/aria-label; New folder uses a folder-plus icon. Search and all header actions share one row. Breadcrumbs use an 18 px line and 4 px top margin, without header/sidebar horizontal separators.
+- A single History action routes Home to whole-book changes and other documents to their own history. Both views have the title History and a History of selector populated from the cached navigation index.
+- Browser verified Home -> whole-book History -> selecting boat/log/start.md -> viewing that document -> its History -> Entire book. Selected scope, breadcrumbs and title match each route. Docker is healthy; Ruby syntax and whitespace checks pass. No book writes, application commits or pushes in this round.

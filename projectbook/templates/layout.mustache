@@ -130,7 +130,7 @@
   </script>
   {{/mermaid}}
 
-  <title>{{title}}</title>
+  <title>{{#projectbook_history_screen}}History{{/projectbook_history_screen}}{{^projectbook_history_screen}}{{title}}{{/projectbook_history_screen}}</title>
   {{#projectbook_tree_enabled}}{{>projectbook_style}}{{/projectbook_tree_enabled}}
   {{#has_editor}}{{#projectbook_mdx_editor}}
   <link rel="stylesheet" href="{{base_url}}/projectbook-editor/editor.css">
@@ -139,9 +139,27 @@
 </head>
 <body class="{{#projectbook_tree_enabled}}projectbook-tree-layout{{/projectbook_tree_enabled}}">
 {{#projectbook_tree_enabled}}
+<header class="projectbook-topbar">
+  <div class="projectbook-header-main">
+    <a class="projectbook-home" href="{{base_url}}/Home">ProjectBook</a>
+    <form action="{{search_path}}" method="get" role="search"><input type="search" name="q" aria-label="Search documents" placeholder="Search documents…" value="{{query}}"><button class="btn btn-sm projectbook-tool" type="submit" title="Search documents" aria-label="Search documents">{{#octicon}}search{{/octicon}}</button></form>
+    <nav class="projectbook-header-actions" aria-label="Document actions">
+      {{#projectbook_can_create}}
+        <button class="btn btn-sm projectbook-tool" type="button" data-create-kind="document" title="New document" aria-label="New document">{{#octicon}}file-added{{/octicon}}</button>
+        <button class="btn btn-sm projectbook-tool" type="button" data-create-kind="folder" title="New folder" aria-label="New folder"><svg aria-hidden="true" viewBox="0 0 20 20" class="projectbook-folder-plus"><path d="M2 5a1 1 0 0 1 1-1h5l2 2h7a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1Z"/><path d="M10 8v6M7 11h6"/></svg></button>
+      {{/projectbook_can_create}}
+      <a class="btn btn-sm projectbook-tool" href="{{projectbook_history_url}}" title="History" aria-label="History">{{#octicon}}history{{/octicon}}</a>
+      {{#projectbook_edit_url}}<a class="btn btn-sm projectbook-tool" href="{{projectbook_edit_url}}" title="Edit" aria-label="Edit">{{#octicon}}pencil{{/octicon}}</a>{{/projectbook_edit_url}}
+      {{#projectbook_rename}}<button type="button" class="btn btn-sm projectbook-tool minibutton-rename-page" title="Rename" aria-label="Rename">{{#octicon}}typography{{/octicon}}</button>{{/projectbook_rename}}
+      {{#projectbook_attachment}}<a class="btn btn-sm projectbook-tool" href="{{raw_url}}" target="_blank" rel="noopener" title="Open original" aria-label="Open original">{{#octicon}}link-external{{/octicon}}</a>{{/projectbook_attachment}}
+      <a class="btn btn-sm projectbook-tool" href="{{overview_path}}" title="All files" aria-label="All files">{{#octicon}}file-directory{{/octicon}}</a>
+    </nav>
+  </div>
+  <nav class="projectbook-breadcrumbs" aria-label="Breadcrumb">{{#projectbook_breadcrumbs}}<a href="{{url}}">{{label}}</a>{{/projectbook_breadcrumbs}}</nav>
+  <p id="projectbook-action-notice" role="status" hidden></p>
+</header>
 <noscript><style>#projectbook-nav { visibility: visible !important; }</style></noscript>
 <aside id="projectbook-nav" aria-label="Project explorer" style="visibility:hidden">
-  <a class="projectbook-brand" href="{{base_url}}/Home">ProjectBook <span>Gollum</span></a>
   <label for="projectbook-filter">Explorer</label>
   <input id="projectbook-filter" type="search" placeholder="Find in tree…" autocomplete="off">
   <div class="projectbook-tree-actions"><button type="button" id="projectbook-expand">Expand all</button><button type="button" id="projectbook-collapse">Collapse all</button></div>
@@ -149,10 +167,16 @@
   <p id="projectbook-empty" hidden>No results</p>
   <a class="projectbook-overview" href="{{base_url}}/gollum/overview">All files and attachments ↗</a>
 </aside>
+{{>projectbook_create}}
 {{>projectbook_script}}
 {{/projectbook_tree_enabled}}
 <div class="container-lg clearfix projectbook-content">
 {{{yield}}}
+{{#projectbook_rename}}
+<form name="rename" method="POST" action="{{rename_path}}/{{escaped_url_path}}">
+  <input type="hidden" name="rename"><input type="hidden" name="message">
+</form>
+{{/projectbook_rename}}
 </div>
 </body>
 </html>

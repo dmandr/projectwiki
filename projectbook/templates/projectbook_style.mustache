@@ -1,7 +1,7 @@
 <style>
   :root { --projectbook-nav-width: 278px; scrollbar-gutter: stable; }
   @supports not (scrollbar-gutter: stable) { html { overflow-y: scroll; } }
-  body.projectbook-tree-layout { display: grid; grid-template-columns: var(--projectbook-nav-width) minmax(0, 1fr); min-height: 100vh; }
+  body.projectbook-tree-layout { display: grid; grid-template-columns: var(--projectbook-nav-width) minmax(0, 1fr); min-height: 100vh; grid-template-rows: auto 1fr; }
   #projectbook-nav { min-width: 0; padding: 24px 16px; border-right: 1px solid #dce3eb; background: #f6f8fb; color: #273549; font-size: 14px; }
   #projectbook-nav .projectbook-brand { display: block; color: #142a43; font-size: 22px; font-weight: 650; margin-bottom: 28px; text-decoration: none; }
   #projectbook-nav .projectbook-brand span { display: block; font-size: 12px; font-weight: normal; color: #67778c; margin-top: 3px; }
@@ -25,7 +25,7 @@
   #projectbook-tree a { display: block; padding: 2px 8px; line-height: 20px; border-radius: 4px; color: #45566c; text-decoration: none; overflow-wrap: anywhere; }
   #projectbook-tree a:hover { background: #e7edf5; color: #143d6b; }
   #projectbook-tree a[aria-current="page"] { background: #dceafa; color: #154b80; font-weight: 600; }
-  #projectbook-nav .projectbook-overview { display: block; margin-top: 24px; border-top: 1px solid #dce3eb; padding-top: 16px; font-size: 12px; }
+  #projectbook-nav .projectbook-overview { display: block; margin-top: 24px; padding-top: 8px; font-size: 12px; }
   .projectbook-content { padding: 20px 28px; min-width: 0; width: 100%; align-self: start; }
   .projectbook-content #wiki-wrapper { min-width: 0; }
   .projectbook-content nav.actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; width: 100%; overflow: visible; }
@@ -34,11 +34,45 @@
   .projectbook-attachment-actions { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; }
   .projectbook-image-preview { display: block; max-width: 100%; max-height: calc(100vh - 180px); object-fit: contain; }
   .projectbook-pdf-preview { display: block; width: 100%; height: calc(100vh - 180px); min-height: 400px; border: 1px solid #dce3eb; }
+  .projectbook-topbar { grid-column: 1 / -1; padding: 12px 20px 6px; background: #f6f8fb; }
+  .projectbook-header-main { display: flex; align-items: center; gap: 12px; }
+  .projectbook-home { color: #142a43; font-size: 20px; font-weight: 650; }
+  .projectbook-header-main form { display: flex; gap: 6px; flex: 1; min-width: 60px; max-width: 640px; margin: 0; }
+  .projectbook-header-main input { min-width: 0; width: 100%; border: 1px solid #ccd7e2; border-radius: 6px; padding: 6px 10px; }
+  .projectbook-header-actions { display: flex; flex-shrink: 0; gap: 6px; margin-left: auto; }
+  .projectbook-topbar .projectbook-tool { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 7px; background: white; color: #45566c; border: 1px solid #ccd7e2; box-shadow: none; }
+  .projectbook-tool svg { width: 16px; height: 16px; flex: 0 0 16px; fill: currentColor; }
+  .projectbook-topbar .projectbook-tool:hover { background: #e7edf5; color: #143d6b; }
+  .projectbook-topbar :focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
+  .projectbook-breadcrumbs { display: flex; gap: 6px; font-size: 12px; line-height: 18px; margin-top: 4px; min-width: 0; white-space: nowrap; overflow-x: auto; }
+  .projectbook-breadcrumbs a { color: #67778c; }
+  .projectbook-tool svg.projectbook-folder-plus { fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+  .projectbook-history-scope { display: flex; align-items: center; gap: 10px; margin: 0 0 20px; }
+  .projectbook-history-scope select { max-width: min(100%, 480px); min-width: 0; padding: 6px 10px; border: 1px solid #ccd7e2; border-radius: 6px; background: white; }
+  .projectbook-breadcrumbs a + a::before { content: '/'; color: #8a97a7; margin-right: 8px; }
+  #projectbook-action-notice { flex-basis: 100%; margin: 0; color: #9a4514; font-size: 13px; }
+  .projectbook-content #overview .breadcrumb, .projectbook-content #wiki-content > .breadcrumb { display: none; }
+  #projectbook-create-dialog { width: min(460px, calc(100% - 32px)); margin: auto; padding: 24px; border: 1px solid #ccd7e2; border-radius: 10px; box-shadow: 0 12px 48px #152a4333; }
+  #projectbook-create-dialog::backdrop { background: #142a4355; }
+  #projectbook-create-dialog h2 { font-size: 20px; margin: 0 0 20px; }
+  #projectbook-create-dialog label { display: block; font-weight: 600; margin: 12px 0 6px; }
+  #projectbook-create-dialog input, #projectbook-create-dialog select { width: 100%; padding: 8px; border: 1px solid #ccd7e2; border-radius: 6px; background: white; }
+  #projectbook-create-hint, .projectbook-create-path { margin: 12px 0; font-size: 13px; overflow-wrap: anywhere; color: #536b85; }
+  #projectbook-create-error { color: #b42318; }
+  .projectbook-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
   @media(max-width: 700px) {
     body.projectbook-tree-layout { grid-template-columns: minmax(0, 1fr); }
-    #projectbook-nav { border-right: 0; border-bottom: 1px solid #dce3eb; }
+    #projectbook-nav { border-right: 0; }
     #projectbook-nav .projectbook-brand { margin-bottom: 12px; }
     .projectbook-content { padding: 16px; }
   }
-  @media print { :root { scrollbar-gutter: auto; } body.projectbook-tree-layout { display: block; } #projectbook-nav { display: none; } }
+  @media(max-width: 480px) {
+    .projectbook-topbar { padding: 10px 10px 5px; }
+    .projectbook-header-main { gap: 6px; }
+    .projectbook-home { font-size: 16px; }
+    .projectbook-header-actions { gap: 3px; }
+    .projectbook-topbar .projectbook-tool { width: 28px; height: 30px; padding: 5px; }
+    .projectbook-header-main form { gap: 3px; }
+  }
+  @media print { :root { scrollbar-gutter: auto; } body.projectbook-tree-layout { display: block; } #projectbook-nav, .projectbook-topbar { display: none; } }
 </style>
