@@ -79,6 +79,7 @@ Gem::Specification.new do |s|
     lib/gollum/projectbook_save.rb
     lib/gollum/projectbook_knowledge.rb
     lib/gollum/projectbook_mcp.rb
+    lib/gollum/projectbook_settings.rb
     lib/gollum/helpers.rb
     lib/gollum/locales/cn.yml
     lib/gollum/locales/en.yml

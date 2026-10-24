@@ -3,7 +3,7 @@ set -euo pipefail
 source "$(dirname "$0")/common.sh"
 require_book
 require_docker
-if ! compose up -d --build --wait --wait-timeout 120; then
+if ! compose up -d --build --remove-orphans --wait --wait-timeout 120; then
   compose logs --tail 50 wiki
   exit 1
 fi

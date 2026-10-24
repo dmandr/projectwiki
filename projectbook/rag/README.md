@@ -61,3 +61,31 @@ docker exec projectbook-rag-rag-1 python -m unittest -v test_service
 ```
 
 Full numeric results are recorded after the benchmark in the application's verification log. Document contents and detailed private paths are excluded from that public log.
+
+## Per-deployment Settings
+
+RAG remains separate from the wiki. In `projectbook/settings.local.sh`, set:
+
+```sh
+export PROJECTBOOK_RAG_AVAILABLE=true
+export PROJECTBOOK_SETTINGS_ADMIN=true
+```
+
+Then run `./projectbook/start.sh`. The normal deployment uses the optional Compose overlay only when `PROJECTBOOK_RAG_AVAILABLE=true`; false starts just the wiki and downloads no RAG image/model. Applying false with `start.sh` removes that deployment's now-unused sidecars and retains their data volumes. `rag.sh` remains the separate read-only comparison sandbox at 4570.
+
+Provisioning the sidecars does **not** enable model download/inference. New deployments default to disabled. Open the gear icon **Settings**, enable semantic search and save. If automatic indexing is enabled, this schedules indexing and downloads the pinned model if missing. In manual mode, use **Update index now**; a semantic query against an existing index may also load/download its model. Opening Settings never downloads the model.
+
+The UI persists these settings in this deployment's `rag-state` volume (`/state/settings.json`), outside the book:
+
+- Enable/disable semantic search.
+- Automatic indexing, PDF text inclusion, check interval (30–86,400 seconds).
+- Indexing batch size (1–64, applies to the next run).
+- Default search mode and result count (1–20), used when the MCP caller omits them.
+
+Settings use version checks: another browser's newer save cannot be silently overwritten. Unchanged settings do not rewrite the file. Disabled RAG rejects searches/manual indexing and stops an in-progress build at a safe boundary; a running download or PDF extraction may finish first. The published index and model/cache files are retained; the model is released after indexing stops. Turning PDF off filters PDF hits immediately and updates the published index on the next run. Settings report the retained index even when disabled. Disabled sidecars remain lightweight running processes; set `PROJECTBOOK_RAG_AVAILABLE=false` and restart to remove them entirely.
+
+`PROJECTBOOK_SETTINGS_ADMIN` defaults to false. It enables local operator controls separately from document write access, including on a read-only wiki. It is **not** authentication: do not enable anonymous admin controls on a publicly accessible deployment. The current experiment stays loopback-only. Settings writes require the explicit UI header and reject foreign Origin/Host requests. A later authenticated deployment must restrict this operator capability to its administrator.
+
+CPU threads, CPU/RAM limits and initial defaults are documented in `projectbook/settings.example.sh`; changing resources requires a deployment restart. Persisted UI values take precedence over initial `PROJECTBOOK_RAG_ENABLED`, batch-size and poll-interval environment defaults. The model is fixed/pinned in this experiment; arbitrary model selection and model/index transfer via Git are not implemented.
+
+Settings do not travel with Git or to the boat unless explicitly configured later. Each deployment has its own state volume. Resetting/cleaning generated volumes also resets that deployment's saved settings.

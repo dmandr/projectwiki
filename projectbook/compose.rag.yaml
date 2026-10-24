@@ -1,22 +1,14 @@
-# Experimental overlay. Separate instance/port, shared book read-only.
+# Optional deployment overlay. Included only when PROJECTBOOK_RAG_AVAILABLE=true.
 services:
   wiki:
     environment:
-      GOLLUM_READ_ONLY: 'true'
       PROJECTBOOK_RAG_URL: 'http://rag:8090'
-    volumes:
-      - type: bind
-        source: '${PROJECTBOOK_WIKI_DIR}'
-        target: /wiki
-        read_only: true
-        bind:
-          create_host_path: false
   qdrant:
     image: qdrant/qdrant:v1.20.0@sha256:9bfc89f9914fc14876a88c05270685921a55b8877b254a98bcc1cc2f0a424cd2
     volumes:
       - rag-vectors:/qdrant/storage
-    mem_limit: 2g
-    cpus: 2
+    mem_limit: '${PROJECTBOOK_QDRANT_MEMORY:-2g}'
+    cpus: '${PROJECTBOOK_QDRANT_CPUS:-2}'
     restart: unless-stopped
   rag:
     build: ./rag
@@ -25,9 +17,10 @@ services:
       BOOK_REF: '${GOLLUM_REF:-main}'
       QDRANT_URL: http://qdrant:6333
       MODEL_NAME: sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
-      MODEL_THREADS: '4'
-      BATCH_SIZE: '16'
-      POLL_SECONDS: '60'
+      MODEL_THREADS: '${PROJECTBOOK_RAG_THREADS:-4}'
+      RAG_ENABLED: '${PROJECTBOOK_RAG_ENABLED:-false}'
+      BATCH_SIZE: '${PROJECTBOOK_RAG_BATCH_SIZE:-16}'
+      POLL_SECONDS: '${PROJECTBOOK_RAG_POLL_SECONDS:-60}'
     volumes:
       - type: bind
         source: '${PROJECTBOOK_WIKI_DIR}'
@@ -37,8 +30,8 @@ services:
           create_host_path: false
       - rag-models:/models
       - rag-state:/state
-    mem_limit: 4g
-    cpus: 4
+    mem_limit: '${PROJECTBOOK_RAG_MEMORY:-4g}'
+    cpus: '${PROJECTBOOK_RAG_CPUS:-4}'
     depends_on:
       - qdrant
     restart: unless-stopped

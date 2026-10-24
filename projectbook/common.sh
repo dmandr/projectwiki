@@ -20,7 +20,13 @@ esac
 if ((10#$PROJECTBOOK_PORT < 1 || 10#$PROJECTBOOK_PORT > 65535)); then
   echo 'PROJECTBOOK_PORT must be between 1 and 65535.' >&2; exit 1
 fi
-compose() { docker compose -f "$PROJECTBOOK_SCRIPT_DIR/compose.yaml" "$@"; }
+compose() {
+  case "${PROJECTBOOK_RAG_AVAILABLE:-false}" in
+    true) docker compose -f "$PROJECTBOOK_SCRIPT_DIR/compose.yaml" -f "$PROJECTBOOK_SCRIPT_DIR/compose.rag.yaml" "$@" ;;
+    false) docker compose -f "$PROJECTBOOK_SCRIPT_DIR/compose.yaml" "$@" ;;
+    *) echo 'PROJECTBOOK_RAG_AVAILABLE must be true or false.' >&2; return 1 ;;
+  esac
+}
 require_docker() {
   command -v docker >/dev/null || { echo 'Install and start Docker Desktop first.' >&2; exit 1; }
   docker compose version >/dev/null

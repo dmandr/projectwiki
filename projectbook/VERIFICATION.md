@@ -159,3 +159,12 @@
 - Eight Python tests pass: committed Git reads, source chunk/token coverage, query validation, AES/blank PDF/fallback extraction, cache reuse/deletion, failed-index publication preserving old generation, query priority over indexing batches. Generation test uses temporary Git + in-memory Qdrant with synthetic vectors; real model/server behavior is checked separately on the deployed book.
 - Ruby regression suite: 24 tests, 279 assertions, no failures. Optional discovery leaves normal MCP unchanged; stale per-source flags and PDF URLs checked.
 - Stop/restart rollback check preserves generated volumes/book and leaves the main 4569 wiki reachable. `clean` is documented but deliberately not executed after the successful benchmark, to keep the ready-to-review index.
+
+## Deployment Settings — 2026-10-24
+
+- RAG experiment committed as `2fbc27ed` on approval, without push. Subsequent Settings changes remain uncommitted for review.
+- Separate optional Compose overlay for any deployment, plus the comparison sandbox's independent read-only override. `PROJECTBOOK_RAG_AVAILABLE=false` resolves to wiki only; true resolves to wiki + Qdrant + indexer. Resource limits and operator controls are in `settings.example.sh`.
+- English gear-button dialog: enabled/automatic/PDF switches, interval, batch size, default search mode/count, manual update, model cache/load state, retained index statistics. Settings persist outside Git with expected-version checks. Save is disabled until a value actually changes.
+- Eleven Python tests and 27 Ruby tests (292 assertions) pass. Includes no model/database inference when disabled, version conflicts, validation, no-op writes, cancellation boundaries, read-only/operator distinction and request-origin/header guards.
+- Real HTTP checks: persisted changes, stale-settings 409, omitted MCP defaults applied, disabled MCP search and manual indexing rejected; original enabled settings restored. Browser check: first view shows disabled/unloaded model, enabling and Save works, unchanged Save becomes disabled again.
+- TODO audit: editor has native Markdown checklist support via listsPlugin/ListsToggle; stable task IDs, separate task files/metadata and consolidated task list remain planned. Per user clarification, no TODO implementation in this step.

@@ -204,7 +204,7 @@ module Gollum
       rag_request('/status')
     end
 
-    def search_knowledge(query:, path: '', limit: 8, mode: 'hybrid')
+    def search_knowledge(query:, path: '', limit: nil, mode: nil)
       path!(path, root: true)
       result = rag_request('/search', {query: query, path: path, limit: limit, mode: mode})
       current = entries.to_h { |entry| [entry[:path], entry[:sha]] }

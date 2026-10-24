@@ -1,0 +1,104 @@
+<dialog id="projectbook-settings-dialog" aria-labelledby="projectbook-settings-title">
+  <div class="pb-settings-heading"><h2 id="projectbook-settings-title">Settings</h2><button type="button" class="btn btn-sm" id="pb-settings-close" aria-label="Close settings">Close</button></div>
+  <p class="pb-settings-muted">For this deployment only. Settings are stored outside the book and are not synced through Git.</p>
+  <p id="pb-settings-message" role="status"></p>
+  <form id="pb-settings-form">
+    <fieldset id="pb-settings-fields" disabled>
+      <legend>Semantic search <small>Experimental</small></legend>
+      <label class="pb-settings-check"><input type="checkbox" name="enabled"> Enable semantic search</label>
+      <p class="pb-settings-muted">First use downloads a local model (about 241 MB). Disabling stops new searches and indexing at a safe boundary; cached files are kept. A download or PDF already in progress may finish first.</p>
+      <label class="pb-settings-check"><input type="checkbox" name="auto_index"> Automatically update the index</label>
+      <label class="pb-settings-check"><input type="checkbox" name="include_pdf"> Include PDF text (no OCR)</label>
+      <div class="pb-settings-grid">
+        <label>Check for changes every (seconds)<input type="number" name="poll_seconds" min="30" max="86400" required></label>
+        <label>Indexing batch size<input type="number" name="batch_size" min="1" max="64" required></label>
+        <label>Default search mode<select name="default_mode"><option value="hybrid">Hybrid</option><option value="semantic">Semantic</option><option value="keyword">Keyword</option></select></label>
+        <label>Default result count<input type="number" name="result_limit" min="1" max="20" required></label>
+      </div>
+      <p class="pb-settings-muted">Batch size applies to the next indexing run. Larger batches can use more memory. Defaults apply when the MCP caller does not specify them.</p>
+    </fieldset>
+    <div class="pb-settings-buttons"><button class="btn" id="pb-settings-save" type="submit" disabled>Save settings</button><button class="btn" id="pb-settings-reload" type="button">Reload</button><button class="btn" id="pb-settings-index" type="button" disabled>Update index now</button></div>
+  </form>
+  <section aria-label="Search service status"><h3>Model and index</h3><p id="pb-settings-status">Loading…</p><p class="pb-settings-muted" id="pb-settings-model"></p></section>
+</dialog>
+<style>
+#projectbook-settings-dialog { width:min(620px,calc(100vw - 32px)); max-height:90vh; margin:auto; overflow:auto; padding:24px; border:1px solid #dce3eb; border-radius:12px; color:#273549; box-shadow:0 12px 40px #0003; }
+#projectbook-settings-dialog::backdrop { background:#142a4355; }
+.pb-settings-heading { display:flex; align-items:center; justify-content:space-between; gap:16px; }
+.pb-settings-heading h2 { margin:0; font-size:22px; }
+.pb-settings-muted { color:#63748a; font-size:13px; line-height:1.5; margin:10px 0; }
+#pb-settings-fields { border:0; padding:0; margin-top:20px; }
+#pb-settings-fields legend { font-size:17px; font-weight:600; margin-bottom:14px; }
+#pb-settings-fields small { font-size:11px; color:#63748a; margin-left:6px; }
+.pb-settings-check { display:flex; align-items:center; gap:9px; margin:12px 0; font-weight:500; }
+.pb-settings-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:16px; }
+.pb-settings-grid label { display:flex; flex-direction:column; gap:6px; font-size:13px; }
+.pb-settings-grid input, .pb-settings-grid select { padding:8px; border:1px solid #cbd5e1; border-radius:6px; background:white; width:100%; color:#273549; }
+.pb-settings-buttons { display:flex; flex-wrap:wrap; gap:8px; margin-top:18px; }
+#pb-settings-status { white-space:pre-line; font-size:14px; line-height:1.6; }
+#pb-settings-message { color:#8a4100; }
+@media(max-width:480px) { .pb-settings-grid { grid-template-columns:1fr; } }
+@media print { #projectbook-settings-dialog { display:none !important; } }
+</style>
+<script>
+(() => {
+  const dialog = document.getElementById('projectbook-settings-dialog');
+  const form = document.getElementById('pb-settings-form');
+  const fields = document.getElementById('pb-settings-fields');
+  const message = document.getElementById('pb-settings-message');
+  const save = document.getElementById('pb-settings-save');
+  const index = document.getElementById('pb-settings-index');
+  const reload = document.getElementById('pb-settings-reload');
+  const state = document.getElementById('pb-settings-status');
+  let baseline, version, editable = false, busy = false, timer;
+  const endpoint = baseUrl + '/gollum/projectbook/settings';
+  const booleans = ['enabled','auto_index','include_pdf'];
+  const numbers = ['poll_seconds','batch_size','result_limit'];
+  const draft = () => Object.fromEntries(Object.keys(baseline || {}).map(key => [key, booleans.includes(key) ? form.elements[key].checked : numbers.includes(key) ? Number(form.elements[key].value) : form.elements[key].value]));
+  function buttons() { save.disabled = busy || !editable || !baseline || JSON.stringify(draft()) === JSON.stringify(baseline); }
+  async function api(path = '', payload) {
+    const response = await fetch(endpoint + path, payload === undefined ? {cache:'no-store'} : {method:'POST', headers:{'Content-Type':'application/json','X-ProjectWiki-Request':'1'},body:JSON.stringify(payload)});
+    const data = await response.json(); if (!response.ok) throw new Error(data.error || 'Settings unavailable'); return data;
+  }
+  function renderStatus(data) {
+    const s = data.status;
+    if (!s) { state.textContent = data.message || 'Service not installed.'; return; }
+    const report = s.report;
+    state.textContent = [s.state === 'disabled' ? 'Semantic search is disabled.' : 'Index: ' + s.state,
+      'Model: ' + (s.model_loaded ? 'loaded' : s.model_cached ? 'downloaded, not loaded' : 'not downloaded'),
+      s.phase === 'model_download_and_load' ? 'Downloading or loading the model…' : '',
+      s.state === 'indexing' ? 'Processed files: ' + (s.processed_files || 0) + ' · Fragments: ' + (s.chunks || 0) : '',
+      report ? 'Published index: ' + report.files_indexed + ' files · ' + report.chunks + ' fragments' : 'No published index yet.',
+      report ? 'Last build: ' + report.total_seconds + ' s · Files without indexed text: ' + report.errors.length : '',
+      s.indexed_revision ? 'Documents: ' + (s.stale ? 'index needs an update' : 'up to date') : '',
+      s.error || ''].filter(Boolean).join('\n');
+    document.getElementById('pb-settings-model').textContent = (s.model || '') + ' · CPU threads: ' + s.threads + '. Model and CPU/memory limits are deployment settings.';
+    index.disabled = busy || !data.editable || !s.settings?.enabled || s.state === 'indexing';
+  }
+  async function load(reset = false) {
+    try {
+      const data = await api(); renderStatus(data);
+      if (reset) {
+        editable = !!data.editable; fields.disabled = !editable; fields.hidden = !data.available;
+        baseline = data.settings; version = data.version;
+        if (baseline) Object.entries(baseline).forEach(([key,value]) => { if (booleans.includes(key)) form.elements[key].checked = value; else form.elements[key].value = value; });
+        message.textContent = data.message || (!editable ? 'Viewing only. A deployment administrator can enable settings changes.' : '');
+        buttons();
+      }
+    } catch(error) { message.textContent = error.message; if (reset) { editable=false; fields.disabled=true; save.disabled=true; index.disabled=true; } }
+  }
+  document.getElementById('projectbook-settings-open').addEventListener('click', () => { dialog.showModal(); load(true); clearInterval(timer); timer=setInterval(() => { if (!busy) load(false); },5000); });
+  document.getElementById('pb-settings-close').addEventListener('click', () => dialog.close());
+  dialog.addEventListener('close', () => clearInterval(timer));
+  form.addEventListener('input', buttons);
+  reload.addEventListener('click', () => load(true));
+  form.addEventListener('submit', async event => {
+    event.preventDefault(); if (save.disabled) return;
+    busy=true; buttons(); reload.disabled=true; index.disabled=true;
+    try { const data=await api('', {settings:draft(),expected_version:version}); baseline=data.settings;version=data.version;renderStatus(data);message.textContent=data.unchanged?'No changes.':'Settings saved for this deployment.'; }
+    catch(error) { message.textContent=error.message; }
+    finally { busy=false; reload.disabled=false; buttons(); load(false); }
+  });
+  index.addEventListener('click', async () => { busy=true;index.disabled=true;buttons();try { await api('/index',{});message.textContent='Index update requested.'; } catch(error) {message.textContent=error.message;} finally {busy=false;buttons();load(false);} });
+})();
+</script>

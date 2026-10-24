@@ -1,0 +1,12 @@
+# Safety override for the existing comparison sandbox only, not normal deployments.
+services:
+  wiki:
+    environment:
+      GOLLUM_READ_ONLY: 'true'
+    volumes:
+      - type: bind
+        source: '${PROJECTBOOK_WIKI_DIR}'
+        target: /wiki
+        read_only: true
+        bind:
+          create_host_path: false

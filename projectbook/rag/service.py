@@ -17,6 +17,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from fastembed import TextEmbedding
 from qdrant_client import QdrantClient, models
 from rank_bm25 import BM25Okapi
+import settings_store
 
 BOOK = os.getenv('BOOK_DIR', '/book')
 REF = os.getenv('BOOK_REF', 'main')
@@ -37,6 +38,22 @@ SEARCH_WAITERS = 0
 VIEW_LOCK = threading.Lock()
 MODEL_INSTANCE = None
 VIEW = None
+WAKE = threading.Event()
+
+
+def configuration():
+    return settings_store.read(STATE)
+
+
+class IndexCancelled(Exception): pass
+
+
+def check_active(config):
+    current = configuration()
+    if not current['enabled'] or current['include_pdf'] != config['include_pdf']:
+        raise IndexCancelled('Indexing stopped after settings changed; published index retained')
+
+
 Q = QdrantClient(url=os.getenv('QDRANT_URL', 'http://qdrant:6333'), timeout=30)
 
 
@@ -209,24 +226,32 @@ def index_book(force=False):
     try:
         STATE.mkdir(parents=True, exist_ok=True)
         (STATE / 'cache').mkdir(exist_ok=True)
+        config = configuration()
+        if not config['enabled']:
+            STATUS.update(state='disabled', phase='idle')
+            return
+        batch = config['batch_size']
         revision = head()
         STATUS.pop('error', None)
         STATUS.update(state='indexing', phase='starting', started_at=time.time(), processed_files=0)
         current = aliases().get(ALIAS)
         if current:
             current_report = json.loads((STATE / (current + '.json')).read_text())
-            STATUS.update(indexed_revision=current_report['revision'], report=current_report['report'])
-            if not force and current_report['revision'] == revision and current_report['model'] == MODEL and current_report['schema'] == SCHEMA:
+            STATUS.update(indexed_revision=current_report['revision'], indexed_include_pdf=current_report.get('include_pdf', True), report=current_report['report'])
+            if not force and current_report['revision'] == revision and current_report['model'] == MODEL and current_report['schema'] == SCHEMA and current_report.get('include_pdf', True) == config['include_pdf']:
                 STATUS.update(state='ready', phase='idle', indexed_revision=revision, report=current_report['report'])
                 return
         with MODEL_LOCK:
             model = load_model()
+        check_active(config)
         generation = 'projectbook_' + uuid.uuid4().hex
         all_chunks, files = [], []
-        report = {'revision': revision, 'model': MODEL, 'model_revision': MODEL_REVISION, 'schema': SCHEMA, 'threads': THREADS, 'batch_size': BATCH,
+        report = {'revision': revision, 'model': MODEL, 'model_revision': MODEL_REVISION, 'schema': SCHEMA, 'threads': THREADS, 'batch_size': batch,
                   'files_total': 0, 'files_indexed': 0, 'chunks': 0, 'cache_hits': 0,
                   'extraction_seconds': 0., 'embedding_seconds': 0., 'upload_seconds': 0., 'pdf': [], 'errors': []}
         for entry in entries(revision):
+            check_active(config)
+            if entry['type'] == 'pdf' and not config['include_pdf']: continue
             report['files_total'] += 1
             STATUS.update(phase='extract_and_embed', processed_files=report['files_total'] - 1, current_type=entry['type'])
             cache_key = hashlib.sha256((SCHEMA + MODEL + MODEL_REVISION + entry['sha'] + entry['path']).encode()).hexdigest()
@@ -245,11 +270,12 @@ def index_book(force=False):
                     tick = time.perf_counter()
                     pairs = embedding_inputs(model, pieces, title)
                     vectors = []
-                    for offset in range(0, len(pairs), BATCH):
+                    for offset in range(0, len(pairs), batch):
+                        check_active(config)
                         # Yield the model between batches so searches can use the previous
                         # published generation while a large PDF is being indexed.
                         with model_slot():
-                            vectors.extend(model.embed([text for _, text in pairs[offset:offset + BATCH]], batch_size=BATCH))
+                            vectors.extend(model.embed([text for _, text in pairs[offset:offset + batch]], batch_size=batch))
                     embed_seconds = time.perf_counter() - tick
                     data = {'title': title, 'chunks': [p for p, _ in pairs], 'vectors': [v.tolist() for v in vectors],
                             'extraction': extraction, 'extraction_seconds': extract_seconds, 'embedding_seconds': embed_seconds}
@@ -288,7 +314,7 @@ def index_book(force=False):
                       model_load_seconds=STATUS.get('model_load_seconds', 0), finished_at=time.time())
         for key in ('extraction_seconds', 'embedding_seconds', 'upload_seconds'):
             report[key] = round(report[key], 3)
-        manifest = {'revision': revision, 'model': MODEL, 'schema': SCHEMA, 'report': report, 'chunks': all_chunks, 'files': files}
+        manifest = {'revision': revision, 'model': MODEL, 'schema': SCHEMA, 'report': report, 'chunks': all_chunks, 'files': files, 'include_pdf': config['include_pdf']}
         atomic_json(STATE / (generation + '.json'), manifest)
         actions = []
         if current:
@@ -296,17 +322,18 @@ def index_book(force=False):
         actions.append(models.CreateAliasOperation(create_alias=models.CreateAlias(collection_name=generation, alias_name=ALIAS)))
         # Search holds this lock through its query; no mixed manifests or deleted old generation.
         with VIEW_LOCK:
+            check_active(config)
             Q.update_collection_aliases(change_aliases_operations=actions)
             published = True
             VIEW = None
-        STATUS.update(state='ready', phase='idle', indexed_revision=revision, report=report)
+        STATUS.update(state='ready', phase='idle', indexed_revision=revision, indexed_include_pdf=config['include_pdf'], report=report)
         # Keep one previous generation for rollback; caches are disposable and explicitly cleaned with rag.sh clean.
         for collection in Q.get_collections().collections:
             if collection.name.startswith('projectbook_') and collection.name not in (generation, current):
                 Q.delete_collection(collection.name)
                 (STATE / (collection.name + '.json')).unlink(missing_ok=True)
     except Exception as error:
-        STATUS.update(state='error', phase='idle', error=type(error).__name__ + ': ' + str(error)[:250])
+        STATUS.update(state=('disabled' if not configuration()['enabled'] else 'paused') if isinstance(error, IndexCancelled) else 'error', phase='idle', error=type(error).__name__ + ': ' + str(error)[:250])
         print(json.dumps({'event': 'index_error', 'error': STATUS['error']}), flush=True)
         if generation and not published:
             try:
@@ -328,7 +355,11 @@ def get_view():
     return VIEW
 
 
-def search(query, path='', limit=8, mode='hybrid'):
+def search(query, path='', limit=None, mode=None):
+    config = configuration()
+    if not config['enabled']: raise ValueError('Semantic search is disabled in this deployment')
+    limit = config['result_limit'] if limit is None else limit
+    mode = config['default_mode'] if mode is None else mode
     if not isinstance(query, str) or not 1 <= len(query.strip()) <= 500:
         raise ValueError('Use a query of 1..500 characters')
     if not isinstance(path, str) or len(path) > 1024 or (path and any(p in ('', '.', '..') for p in path.split('/'))):
@@ -339,6 +370,7 @@ def search(query, path='', limit=8, mode='hybrid'):
     with VIEW_LOCK:
         active, data, bm25 = get_view()
         candidates = [p for p in data['chunks'] if not path or p['path'] == path or p['path'].startswith(path + '/')]
+        candidates = [p for p in candidates if config['include_pdf'] or p['type'] != 'pdf']
         by_id = {p['id']: p for p in candidates}
         scores, dense_scores = collections.defaultdict(float), {}
         if mode != 'keyword':
@@ -346,7 +378,7 @@ def search(query, path='', limit=8, mode='hybrid'):
                 model = load_model()
                 vector = list(model.query_embed([query]))[0].tolist()
             # Scope filtered using explicit matched paths; no approximate post-filter loss.
-            query_filter = models.Filter(must=[models.FieldCondition(key='path', match=models.MatchAny(any=sorted({p['path'] for p in candidates})))]) if path else None
+            query_filter = models.Filter(must=[models.FieldCondition(key='path', match=models.MatchAny(any=sorted({p['path'] for p in candidates})))]) if path or not config['include_pdf'] else None
             dense = Q.query_points(active, query=vector, query_filter=query_filter, limit=60, with_payload=False).points if candidates else []
             for rank, point in enumerate(dense, 1):
                 scores[str(point.id)] += 1 / (60 + rank)
@@ -370,10 +402,25 @@ def search(query, path='', limit=8, mode='hybrid'):
 
 
 def status():
+    if 'report' not in STATUS:
+        # Inspect a retained index without loading/downloading the embedding model.
+        try:
+            active = aliases().get(ALIAS)
+            if active:
+                saved = json.loads((STATE / (active + '.json')).read_text())
+                STATUS.update(report=saved['report'], indexed_revision=saved['revision'], indexed_include_pdf=saved.get('include_pdf', True))
+        except Exception:
+            pass
     result = dict(STATUS)
+    config = configuration()
+    result['settings'] = config
+    result['model_cached'] = (Path('/models') / ('models--' + MODEL_REPO.replace('/', '--')) / 'snapshots' / MODEL_REVISION / 'model_optimized.onnx').exists()
+    result['model_loaded'] = MODEL_INSTANCE is not None
+    result['model_revision'] = MODEL_REVISION
+    if not config['enabled']: result['state'] = 'disabled'
     try:
         result['current_revision'] = head()
-        result['stale'] = result.get('indexed_revision') != result['current_revision']
+        result['stale'] = result.get('indexed_revision') != result['current_revision'] or result.get('indexed_include_pdf', True) != config['include_pdf']
     except Exception:
         result['stale'] = True
     return result
@@ -387,26 +434,51 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path == '/health': self.respond(200, {'alive': True}); return
         if self.path == '/status': self.respond(200, status()); return
+        if self.path == '/settings':
+            value = configuration()
+            self.respond(200, {'settings': value, 'version': settings_store.version(value), 'status': status()}); return
         self.respond(404, {'error': 'Not found'})
     def do_POST(self):
         try:
             size = int(self.headers.get('Content-Length', '0'))
             if not 0 < size <= 8192: raise ValueError('Request too large or empty')
             payload = json.loads(self.rfile.read(size))
-            if self.path == '/search': self.respond(200, search(**payload))
+            if self.path == '/settings':
+                saved = settings_store.save(STATE, payload['settings'], payload['expected_version'])
+                WAKE.set()
+                self.respond(200, dict(saved, status=status()))
+            elif self.path == '/search': self.respond(200, search(**payload))
             elif self.path == '/index':
+                if not configuration()['enabled']: raise ValueError('Enable semantic search before indexing')
                 threading.Thread(target=index_book, kwargs={'force': payload.get('force') is True}, daemon=True).start(); self.respond(202, {'scheduled': True})
             else: self.respond(404, {'error': 'Not found'})
-        except (ValueError, TypeError) as error:
+        except settings_store.Conflict as error:
+            self.respond(409, {'error': str(error)})
+        except (ValueError, TypeError, KeyError) as error:
             self.respond(422, {'error': str(error)[:200]})
         except Exception as error:
             self.respond(503, {'error': 'Search unavailable: ' + type(error).__name__})
 
 
 def poll():
+    global MODEL_INSTANCE, VIEW
     while True:
-        index_book()
-        time.sleep(max(30, int(os.getenv('POLL_SECONDS', '60'))))
+        WAKE.clear()
+        try:
+            config = configuration()
+            if config['enabled'] and config['auto_index']:
+                index_book()
+            elif not config['enabled']:
+                if not INDEX_LOCK.locked():
+                    with VIEW_LOCK, MODEL_LOCK:
+                        MODEL_INSTANCE = None; VIEW = None
+                STATUS.update(state='disabled', phase='idle')
+            elif STATUS['state'] in ('starting', 'disabled'):
+                STATUS.update(state='idle', phase='manual_indexing')
+            WAKE.wait(config['poll_seconds'])
+        except Exception as error:
+            STATUS.update(state='error', error=str(error)[:200])
+            WAKE.wait(30)
 
 
 if __name__ == '__main__':

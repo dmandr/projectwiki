@@ -18,6 +18,7 @@ require 'gollum/projectbook_creation'
 require 'gollum/projectbook_titles'
 require 'gollum/projectbook_save'
 require 'gollum/projectbook_mcp'
+require 'gollum/projectbook_settings'
 
 # Requirements for loading the layout view:
 require 'gollum/views/helpers'
@@ -89,6 +90,7 @@ module Precious
     register Mustache::Sinatra
     register Sinatra::Namespace
     use Gollum::ProjectbookCreation::WriteLock
+    use Gollum::ProjectbookSettings::Endpoint
     use Gollum::ProjectbookMCP::Endpoint, self
     include Precious::Helpers
 

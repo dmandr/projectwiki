@@ -28,6 +28,7 @@ class RetrievalTests(unittest.TestCase):
             client = QdrantClient(':memory:')
             with patch.multiple(service, BOOK=str(book), STATE=state, Q=client, STATUS={}, VIEW=None), \
                  patch.object(service, 'load_model', return_value=fake_model), \
+                 patch.object(service, 'configuration', return_value=dict(service.settings_store.DEFAULTS, enabled=True)), \
                  patch.object(service, 'embedding_inputs', side_effect=lambda model, pieces, title: [(p, p['text']) for p in pieces]):
                 service.index_book()
                 self.assertEqual('ready', service.STATUS['state'])

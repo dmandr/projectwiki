@@ -5,7 +5,8 @@ source "$(dirname "$0")/common.sh"
 export PROJECTBOOK_INSTANCE=projectbook-rag
 export PROJECTBOOK_PORT=4570
 export PROJECTBOOK_IMAGE=projectwiki:rag-local
-rag_compose() { docker compose -f "$PROJECTBOOK_SCRIPT_DIR/compose.yaml" -f "$PROJECTBOOK_SCRIPT_DIR/compose.rag.yaml" "$@"; }
+export PROJECTBOOK_SETTINGS_ADMIN=true
+rag_compose() { docker compose -f "$PROJECTBOOK_SCRIPT_DIR/compose.yaml" -f "$PROJECTBOOK_SCRIPT_DIR/compose.rag.yaml" -f "$PROJECTBOOK_SCRIPT_DIR/compose.rag-experiment.yaml" "$@"; }
 require_docker
 case "${1:-status}" in
   start) require_book; rag_compose up -d --build --wait --wait-timeout 120; echo 'Experimental wiki: http://127.0.0.1:4570/Home'; echo 'MCP: http://127.0.0.1:4570/mcp (read-only, includes search_knowledge and get_search_index_status)' ;;
