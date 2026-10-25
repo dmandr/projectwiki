@@ -18,6 +18,19 @@ class TreeTest < Minitest::Test
     @client=Rack::MockRequest.new(Precious::App)
   end
   def teardown;FileUtils.remove_entry(@dir);end
+  def test_folder_overview_opens_editable_index_and_explicit_listing_remains_available
+    wiki.write_file('a/.index.md', "# Folder title\n\n[First](first.md)\n", message:'Landing')
+    response=@client.get('/gollum/overview/a/')
+    assert_equal 302,response.status
+    assert_equal '/a/.index.md',URI(response['Location']).path
+    listing=@client.get('/gollum/overview/a/?files=1')
+    assert_equal 200,listing.status
+    assert_includes listing.body,'first.md'
+    assert_equal 200,@client.get('/gollum/overview/b/').status
+    page=wiki.page('a/.index.md')
+    wiki.delete_page(page,message:'Remove landing')
+    assert_equal 200,@client.get('/gollum/overview/a/').status
+  end
   def wiki;Gollum::Wiki.new(@dir,ref:'main');end
   def revision;wiki.commit_for('main').id;end
   def post(input, headers={})

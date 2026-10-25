@@ -99,7 +99,9 @@ def entries(revision):
         path = path.decode('utf-8')
         if kind != 'blob' or mode not in ('100644', '100755'):
             continue
-        if any(p.startswith(('.', '_')) for p in path.split('/')):
+        parts = path.split('/')
+        folder_page = len(parts) > 1 and parts[-1] == '.index.md' and not any(p.startswith(('.', '_')) for p in parts[:-1])
+        if any(p.startswith(('.', '_')) for p in parts) and not folder_page:
             continue
         ext = Path(path).suffix.lower()
         if ext not in ('.md', '.markdown', '.pdf'):

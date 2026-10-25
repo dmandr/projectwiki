@@ -27,8 +27,8 @@ class CreationTest < Minitest::Test
   def test_folder_and_document_preflight
     response = request('folder', '', 'Sea notes')
     assert_equal 200, response.status, response.body
-    assert_equal '/gollum/overview/Sea%20notes/', JSON.parse(response.body)['url']
-    assert File.file?(File.join(@dir, 'Sea notes/.gitkeep'))
+    assert_equal '/gollum/edit/Sea%20notes/.index.md', JSON.parse(response.body)['url']
+    assert File.file?(File.join(@dir, 'Sea notes/.index.md'))
     before = head
     response = request('document', 'Sea notes', 'Заметка')
     assert_equal 200, response.status, response.body

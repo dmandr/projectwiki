@@ -34,9 +34,10 @@ module ProjectBookWorkspaceNavigation
 
   def projectbook_breadcrumbs
     parts = projectbook_object_path.split('/').reject(&:empty?)
+    parts.pop if parts.last == '.index.md'
     [{label: 'Files', url: overview_path}] + parts.each_with_index.map do |part, i|
       path = parts[0..i].join('/')
-      url = if i == parts.length - 1 && (@page || @file)
+      url = if i == parts.length - 1 && (@page || @file) && !Gollum::ProjectbookFolders.page?(projectbook_object_path)
         @file ? page_route('gollum/file/' + Gollum::NavigationIndex.encode_path(path)) : page_route(Gollum::NavigationIndex.encode_path(path))
       else
         overview_path + '/' + Gollum::NavigationIndex.encode_path(path) + '/'

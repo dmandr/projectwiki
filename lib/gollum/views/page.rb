@@ -40,7 +40,8 @@ module Precious
       end
 
       def content
-        Gollum::ProjectbookCallouts.render(content_without_page_header(@content))
+        html = Gollum::ProjectbookCallouts.render(content_without_page_header(@content))
+        Gollum::ProjectbookFolders.render(html,@page,base:base_url.to_s,revision:@version)
       end
 
       def author

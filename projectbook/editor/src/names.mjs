@@ -1,4 +1,5 @@
 export function titleFromPath(path) {
+  if (path.endsWith('/.index.md')) path=path.slice(0,-10);
   return path.split('/').pop().replace(/\.(md|markdown|mdown|mkdn)$/i, '').replace(/[-_]+/g, ' ').trim().split(/\s+/).map(word => word ? word[0].toUpperCase() + word.slice(1) : '').join(' ');
 }
 export function titleFromInput(value) {

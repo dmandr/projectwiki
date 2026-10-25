@@ -5,8 +5,12 @@ module Precious
   module Views
     class Overview < Layout
       attr_reader :name, :results, :ref, :allow_editing, :newable
-      HIDDEN_PATHS = ['.gitkeep']
+      HIDDEN_PATHS = ['.gitkeep', '.index.md']
 
+      def folder_page_missing
+        @allow_editing && @path && !@path.empty? && !@path.split('/').any? { |part| part.start_with?('.', '_') } && !@results.any? { |item| item.url_path == @path+'/.index.md' }
+      end
+      def folder_page_title; Gollum::ProjectbookTitles.from_path(@path); end
       def title
         @path ? ::File.basename(@path) : 'Files'
       end
@@ -52,7 +56,8 @@ module Precious
               folder_name = result_path.split('/').first
               folder_path = @path ? "#{@path}/#{folder_name}" : folder_name
               folder_url  = "#{overview_path}/#{Gollum::NavigationIndex.encode_path(folder_path)}/"
-              files_and_folders << {name: folder_name, icon: rocticon('file-directory-fill'), type: 'dir', url: folder_url, is_file: false}
+              landing = @results.find { |item| item.url_path == "#{folder_path}/.index.md" }
+              files_and_folders << {name: landing ? landing.title : folder_name, icon: rocticon('file-directory-fill'), type: 'dir', url: folder_url, is_file: false}
             elsif !HIDDEN_PATHS.include?(result_path)
               file_url = Gollum::Page.valid_page_name?(result.filename) ? page_route(result.escaped_url_path) : page_route('gollum/file/' + result.escaped_url_path)
               files_and_folders << {name: result.respond_to?(:title) ? result.title : result.filename, icon: rocticon('file'), type: 'file', url: file_url, file_path: result.escaped_url_path, is_file: true}

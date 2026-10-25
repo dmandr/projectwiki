@@ -27,6 +27,8 @@ const form = document.getElementById('gollum-editor-form');
 if (document.getElementById('projectbook-editor-app')) {
   const initial = document.getElementById('projectbook-initial-markdown').value;
   const path = form.dataset.path;
+  const folderPage = path.endsWith('/.index.md');
+  const folderPath = path.slice(0,-10);
   const isNew = form.dataset.create === 'true';
   const base = window.baseUrl || '';
   const encodePath = value => value.split('/').map(part => encodeURIComponent(part).replace(/[!'()*]/g, c => '%' + c.charCodeAt(0).toString(16))).join('/');
@@ -57,17 +59,22 @@ if (document.getElementById('projectbook-editor-app')) {
     React.useEffect(()=>{todos.setBusy(busy);},[busy]);
     const [confirmDiscard, setConfirmDiscard] = useState(false);
     const [deleteOpen,setDeleteOpen]=useState(false),deleteDialog=useRef(null);
+    const [deletePreview,setDeletePreview]=useState(null);
+    async function openDelete(){
+      setStatus('');setDeletePreview(null);setDeleteOpen(true);
+      if(folderPage)try{const response=await fetch(base+'/gollum/projectbook/folder-delete/preview',{method:'POST',headers:{'Content-Type':'application/json','X-ProjectWiki-Request':'1'},body:JSON.stringify({folder:folderPath})});const data=await response.json();if(!response.ok)throw Error(data.error||'Preview failed');setDeletePreview(data);}catch(error){setStatus(error.message);}
+    }
     React.useEffect(()=>{if(deleteOpen)deleteDialog.current?.showModal();},[deleteOpen]);
     const [files, setFiles] = useState([]), [draft, setDraft] = useState(null);
     const destination = useRef(path);
     const name = useRef(path.split('/').pop());
     const [moveOpen, setMoveOpen] = useState(false), [movePath, setMovePath] = useState(path);
     const moveDialog = useRef(null);
-    const openMove = () => { if (titleEditing && !applyTitle()) return; setMovePath(targetPath()); setStatus(''); setMoveOpen(true); };
+    const openMove = () => { if (titleEditing && !applyTitle()) return; setMovePath(folderPage ? folderPath : targetPath()); setStatus(''); setMoveOpen(true); };
     React.useEffect(() => { window.projectbookRename = openTitle; return () => { delete window.projectbookRename; }; });
     React.useEffect(() => { if (moveOpen) moveDialog.current?.showModal(); }, [moveOpen]);
     const [filename, setFilename] = useState(name.current);
-    const fallbackTitle = titleFromPath(filename);
+    const fallbackTitle = titleFromPath(folderPage ? path : filename);
     const [headingTitle, setHeadingTitle] = useState(() => documentTitle(initial, ''));
     const [hasTextChanges, setHasTextChanges] = useState(false);
     const [titleEditing, setTitleEditing] = useState(false), [titleValue, setTitleValue] = useState('');
@@ -224,9 +231,9 @@ if (document.getElementById('projectbook-editor-app')) {
       working.current=true;setBusy(true);setStatus('Deleting document…');
       try {
         await stash().catch(()=>{});
-        const response=await fetch(base+'/gollum/projectbook/delete',{
+        const response=await fetch(base+(folderPage ? '/gollum/projectbook/folder-delete/confirm' : '/gollum/projectbook/delete'),{
           method:'POST',headers:{'Content-Type':'application/json','X-ProjectWiki-Request':'1'},
-          body:JSON.stringify({path,etag:form.dataset.etag})
+          body:JSON.stringify(folderPage ? {folder:folderPath,revision:deletePreview?.revision,confirmed_folder:folderPath} : {path,etag:form.dataset.etag})
         });
         const result=await response.json();
         if(!response.ok || !result.url)throw new Error(result.error || 'Delete failed. Your draft is kept.');
@@ -306,7 +313,7 @@ if (document.getElementById('projectbook-editor-app')) {
         const todoTools=<TodoToolbar store={todos} onError={setStatus} onInsert={(item,status)=>insert(todoLink(item,path,status),null,'todo')}/>;
         return <EditorToolbar sourceTools={<><span>Markdown</span>{todoTools}</>}>
           <UndoRedo/><Separator/><CalloutBlockType/><BoldItalicUnderlineToggles/><Separator/>
-          <span className="pb-editor-list-tools"><ListsToggle/>{todoTools}</span><CreateLink/><InsertFootnote/><InsertImage/><InsertTable/><InsertCodeBlock/>
+          <span className="pb-editor-list-tools"><ListsToggle/>{todoTools}</span><CreateLink/>{folderPage&&<button type="button" title="Insert dynamic subpages block" aria-label="Insert subpages" onClick={()=>insert('[Pages](#projectbook-pages)',null)}>☷</button>}<InsertFootnote/><InsertImage/><InsertTable/><InsertCodeBlock/>
         </EditorToolbar>;
       }})
     ], []);
@@ -327,39 +334,39 @@ if (document.getElementById('projectbook-editor-app')) {
         <button type="button" className="btn btn-sm" title="Move" aria-label="Move" disabled={busy} onClick={openMove}>
           <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M3 7h7l2 2h9v11H3ZM3 7V4h7l2 3M8 14h9m-3-3 3 3-3 3"/></svg>
         </button>
-        {!isNew && <button type="button" className="btn btn-sm" title="Delete document" aria-label="Delete document" disabled={busy} onClick={()=>{setStatus('');setDeleteOpen(true);}}>
+        {!isNew && <button type="button" className="btn btn-sm" title="Delete document" aria-label="Delete document" disabled={busy} onClick={openDelete}>
           <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7"/></svg>
         </button>}
       </div>
       {deleteOpen && <dialog ref={deleteDialog} className="pb-move-dialog" aria-labelledby="pb-delete-title" onCancel={event=>{if(busy)event.preventDefault();else setDeleteOpen(false);}}>
-        <h2 id="pb-delete-title">Delete document?</h2>
-        <p><strong>/{path}</strong></p>
-        <p>The page will be removed from the book. Its saved versions remain in Git history. Attachments and separate TODO files are kept.</p>
+        <h2 id="pb-delete-title">{folderPage ? 'Delete entire folder?' : 'Delete document?'}</h2>
+        <p><strong>{displayTitle} — /{folderPage ? folderPath : path}</strong></p>
+        {folderPage ? <p>Delete this folder and ALL subfolders, pages and attachments inside it. {deletePreview ? `${deletePreview.files} files (${deletePreview.documents} Markdown documents) will be removed.` : 'Loading deletion preview…'} Git history is kept. This confirmation cannot be disabled.</p> : <p>The page will be removed from the book. Its saved versions remain in Git history. Attachments and separate TODO files are kept.</p>}
         {(dirty() || draft) && <p>Unsaved edits in this editor will be discarded.</p>}
         <div role="status" className="pb-editor-status">{status}</div>
         <div className="pb-editor-actions">
           <button autoFocus type="button" className="btn" disabled={busy} onClick={()=>setDeleteOpen(false)}>Cancel</button>
-          <button type="button" className="btn btn-danger" disabled={busy} onClick={deleteDocument}>Delete document</button>
+          <button type="button" className="btn btn-danger" disabled={busy || (folderPage && !deletePreview)} onClick={deleteDocument}>{folderPage ? 'Delete entire folder' : 'Delete document'}</button>
         </div>
       </dialog>}
       <p className="pb-document-location">/{targetPath()}</p>
       {titleEditing && <p className="pb-title-hint">The title is the first # heading in Markdown. The filename and URL stay unchanged. Enter to apply, Escape to cancel.</p>}
       {moveOpen && <dialog ref={moveDialog} className="pb-move-dialog" aria-labelledby="pb-move-title"
         onCancel={event => { if (busy) event.preventDefault(); else setMoveOpen(false); }}>
-        <h2 id="pb-move-title">Move document</h2>
+        <h2 id="pb-move-title">{folderPage ? 'Move folder' : 'Move document'}</h2>
         <p>Current path: <strong>/{targetPath()}</strong></p>
-        <label>New document path<input autoFocus className="form-control" aria-label="New document path" value={movePath} disabled={busy}
+        <label>{folderPage ? 'New folder path' : 'New document path'}<input autoFocus className="form-control" aria-label="New document path" value={movePath} disabled={busy}
           onKeyDown={event => { if (event.key === 'Enter') event.preventDefault(); }} onChange={event => setMovePath(event.target.value)}/></label>
         <p>New path: <strong>/{movePath.trim().replace(/^\//, '')}</strong></p>
-        <p>Use a full path from the book root, including the Markdown extension. Missing folders will be created.</p>
+        <p>{folderPage ? 'Use a folder path from the book root. The entire subtree moves together, preserving its order.' : 'Use a full path from the book root, including the Markdown extension. Missing folders will be created.'}</p>
         <p>{isNew ? 'This chooses where the document will be saved. Nothing is created until Save.' : 'The document and any unsaved edits will be saved together at the new path. The old file will be removed.'}</p>
         <p>Links inside this document and incoming links elsewhere in the book will be updated. Review affected files before confirming.</p>
         <div role="status" className="pb-editor-status">{status}</div>
         <div className="pb-editor-actions">
           <button type="button" className="btn" disabled={busy} onClick={() => setMoveOpen(false)}>Cancel</button>
-          <button type="button" className="btn btn-primary" disabled={busy || !movePath.trim() || movePath.trim().replace(/^\//, '') === targetPath()}
+          <button type="button" className="btn btn-primary" disabled={busy || !movePath.trim() || movePath.trim().replace(/^\//, '').replace(/\/$/, '') === (folderPage ? folderPath : targetPath())}
             onClick={() => {
-              const next = movePath.trim().replace(/^\//, '');
+              const next = movePath.trim().replace(/^\//, '').replace(/\/$/,'') + (folderPage ? '/.index.md' : '');
               if (isNew) { destination.current = next; name.current = next.split('/').pop(); setFilename(name.current); setMoveOpen(false); stashSoon(); }
               else save(null, next);
             }}>{isNew ? 'Use this path' : 'Preview move'}</button>

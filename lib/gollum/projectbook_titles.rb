@@ -5,6 +5,7 @@ require 'nokogiri'
 module Gollum
   module ProjectbookTitles
     def self.from_path(path)
+      path = ::File.dirname(path) if path.to_s.end_with?('/.index.md')
       ::File.basename(path.to_s).sub(/\.(md|markdown|mdown|mkdn)\z/i, '').tr('_-', ' ').split.map { |word| word.sub(/\A./) { |c| c.upcase } }.join(' ')
     end
 

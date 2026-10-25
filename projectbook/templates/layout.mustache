@@ -189,5 +189,11 @@
 <script type="module" id="projectbook-todos-script" data-revision="{{projectbook_todo_revision}}" src="{{base_url}}/projectbook-editor/tasks-view.js"></script>
 <link rel="stylesheet" href="{{base_url}}/projectbook-editor/raw-notes.css">
 <script type="module" src="{{base_url}}/projectbook-editor/raw-notes.js"></script>
+<script>
+document.querySelector('[data-folder-page-create]')?.addEventListener('click',async function(){
+  this.disabled=true;
+  try{const response=await fetch((window.baseUrl||'')+'/gollum/projectbook/folder-page',{method:'POST',headers:{'Content-Type':'application/json','X-ProjectWiki-Request':'1'},body:JSON.stringify({folder:this.dataset.folderPageCreate,title:this.dataset.folderPageTitle})});const result=await response.json();if(!response.ok)throw Error(result.error||'Could not create folder page');location.href=result.url;}catch(error){this.disabled=false;alert(error.message);}
+});
+</script>
 </body>
 </html>

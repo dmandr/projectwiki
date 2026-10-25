@@ -86,6 +86,7 @@ Gem::Specification.new do |s|
     lib/gollum/projectbook_task_migration.rb
     lib/gollum/views/tasks.rb
     lib/gollum/templates/tasks.mustache
+    lib/gollum/projectbook_folders.rb
     lib/gollum/projectbook_save.rb
     lib/gollum/projectbook_knowledge.rb
     lib/gollum/projectbook_attachments.rb

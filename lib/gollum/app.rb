@@ -16,6 +16,7 @@ require 'gollum/assets'
 require 'gollum/navigation_index'
 require 'gollum/projectbook_creation'
 require 'gollum/projectbook_titles'
+require 'gollum/projectbook_folders'
 require 'gollum/projectbook_save'
 require 'gollum/projectbook_tasks'
 require 'gollum/projectbook_raw_notes'
@@ -246,6 +247,40 @@ module Precious
         end
       end
 
+      post '/projectbook/folder-page' do
+        content_type :json
+        halt 403 unless request.env['HTTP_X_PROJECTWIKI_REQUEST'] == '1'
+        halt 403 if request.env['HTTP_ORIGIN'] && request.env['HTTP_ORIGIN'] != "#{request.scheme}://#{request.host_with_port}"
+        begin
+          input=JSON.parse(request.body.read(8193))
+          result=Gollum::ProjectbookFolders.create(wiki_new,folder:input['folder'],title:input['title'],existing:true,options:commit_options)
+          {url:@base_url+'/gollum/edit/'+Gollum::NavigationIndex.encode_path(result[:path])}.to_json
+        rescue JSON::ParserError
+          halt 422, {error:'Invalid JSON.'}.to_json
+        rescue Gollum::ProjectbookCreation::Error => e
+          halt e.status, {error:e.message}.to_json
+        end
+      end
+      post '/projectbook/folder-delete/:action' do
+        content_type :json
+        halt 403 unless request.env['HTTP_X_PROJECTWIKI_REQUEST'] == '1'
+        halt 403 if request.env['HTTP_ORIGIN'] && request.env['HTTP_ORIGIN'] != "#{request.scheme}://#{request.host_with_port}"
+        begin
+          input=JSON.parse(request.body.read(8193))
+          result = case params[:action]
+          when 'preview' then Gollum::ProjectbookFolders.delete_preview(wiki_new,input['folder'])
+          when 'confirm' then Gollum::ProjectbookFolders.delete(wiki_new,folder:input['folder'],revision:input['revision'],confirmed_folder:input['confirmed_folder'],options:commit_options)
+          else halt 404
+          end
+          parent=Gollum::ProjectbookTree.parent(input['folder'])
+          result.merge(url:@base_url+'/gollum/overview/'+Gollum::NavigationIndex.encode_path(parent)).to_json
+        rescue JSON::ParserError
+          halt 422, {error:'Invalid JSON.'}.to_json
+        rescue Gollum::ProjectbookCreation::Error => e
+          halt e.status, {error:e.message}.to_json
+        end
+      end
+
       get '/settings' do
         cache_control :no_store
         mustache :settings
@@ -289,7 +324,7 @@ module Precious
         content_type :json
         wiki = wiki_new
         page = wiki.page(params['path'])
-        entry = Gollum::ProjectbookKnowledge.new(wiki).entries.find { |e| e[:path] == params['path'] && !e[:path].split('/').any? { |part| part.start_with?('.', '_') } }
+        entry = Gollum::ProjectbookKnowledge.new(wiki).entries.find { |e| e[:path] == params['path'] && (Gollum::ProjectbookFolders.page?(e[:path]) || !e[:path].split('/').any? { |part| part.start_with?('.', '_') }) }
         halt 404, {error: 'Document not found.'}.to_json unless entry
         {content: page && page.format == :markdown ? page.text_data : nil, etag: entry[:sha], revision: wiki.commit_for(wiki.ref).id}.to_json
       end
@@ -335,6 +370,12 @@ module Precious
           input = JSON.parse(request.body.read(8193))
           raise Gollum::ProjectbookCreation::Error, 'Invalid request.' unless input.is_a?(Hash)
           wiki = wiki_new
+          if input['kind'] == 'folder'
+            target = input['path'] || Gollum::ProjectbookCreation.prepare(wiki,'folder',input['folder'],input['name'])
+            title = input['title'] || Gollum::ProjectbookTitles.from_path(target)
+            result = Gollum::ProjectbookFolders.create(wiki,folder:target,title:title,options:commit_options)
+            next({url: @base_url+'/gollum/edit/'+Gollum::NavigationIndex.encode_path(result[:path])}.to_json)
+          end
           if input['kind'] == 'document' && input.key?('title')
             title = Gollum::ProjectbookTitles.input_title(input['title'])
             target = Gollum::ProjectbookSave.path!(input['path'])
@@ -342,15 +383,7 @@ module Precious
             next({url: @base_url + '/gollum/edit/' + Gollum::NavigationIndex.encode_path(result[:path])}.to_json)
           end
           target = Gollum::ProjectbookCreation.prepare(wiki, input['kind'], input['folder'], input['name'])
-          if input['kind'] == 'folder'
-            committer = Gollum::Committer.new(wiki, commit_options.merge(message: "Create folder #{target}"))
-            Gollum::ProjectbookTree.append(wiki, committer, target)
-            wiki.write_file(target + '/.gitkeep', '', committer: committer)
-            committer.commit
-            destination = '/gollum/overview/' + Gollum::NavigationIndex.encode_path(target) + '/'
-          else
-            destination = '/gollum/create/' + Gollum::NavigationIndex.encode_path(target)
-          end
+          destination = '/gollum/create/' + Gollum::NavigationIndex.encode_path(target)
           {url: @base_url + destination}.to_json
         rescue JSON::ParserError
           halt 422, {error: 'Invalid JSON.'}.to_json
@@ -506,6 +539,7 @@ module Precious
 
 
       post '/rename/*' do
+        halt 422, 'Move the entire folder in the ProjectBook editor.' if params[:splat].first.to_s.end_with?('/.index.md','/.index')
         wikip = wiki_page(params[:splat].first)
         halt 500 if wikip.nil?
         wiki   = wikip.wiki
@@ -574,6 +608,7 @@ module Precious
       end
 
       post '/delete/*' do
+        halt 422, 'Use the folder deletion preview and confirmation.' if params[:splat].first.to_s.end_with?('/.index.md', '/.index')
         forbid unless @allow_editing
         wiki = wiki_new
         filepath = params[:splat].first
@@ -783,6 +818,10 @@ module Precious
 
         if path
           @path = Pathname.new(path).cleanpath.to_s
+          landing = Gollum::NavigationIndex.for(wiki).folder_page(@path)
+          if landing && params['files'] != '1'
+            redirect "#{@base_url}/#{landing.escaped_url_path}"
+          end
           check_path   = wiki.page_file_dir ? ::File.join(wiki.page_file_dir, @path, '/') : "#{@path}/"
           @results.select!  {|result| result.path.start_with?(check_path) }
         end

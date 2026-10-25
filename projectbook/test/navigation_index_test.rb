@@ -92,4 +92,25 @@ class NavigationIndexTest < Minitest::Test
     assert_includes html, 'href="/Home.md"'
   end
 
+  def test_folder_landing_title_and_link_replace_the_index_row_only_in_folders
+    view = Object.new.extend(ProjectBookDocumentTree)
+    def view.base_url; '/book'; end
+    view.instance_variable_set(:@projectbook_folder_number, 0)
+    html = view.send(:projectbook_render_nodes, {
+      'index.md' => {path: 'index.md', title: 'Root'},
+      'engine' => {children: {
+        '.index.md' => {path: 'engine/.index.md', title: 'Engine <&>'},
+        'service.md' => {path: 'engine/service.md', title: 'Service'},
+        'sub' => {children: {'.index.md' => {path: 'engine/sub/.index.md', title: 'Sub'}}}
+      }}
+    })
+    assert_includes html, 'data-folder-link="engine" href="/book/engine/.index.md"'
+    assert_includes html, 'Engine &lt;&amp;&gt;'
+    assert_includes html, 'data-document="index.md"'
+    assert_includes html, 'data-document="engine/service.md"'
+    refute_includes html, 'data-document="engine/.index.md"'
+    refute_includes html, 'data-document="engine/sub/.index.md"'
+    assert_includes html, 'data-folder-link="engine/sub"'
+  end
+
 end

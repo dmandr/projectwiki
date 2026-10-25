@@ -9,7 +9,7 @@ module Gollum
     def self.path!(path)
       raise Error, 'Invalid document path.' unless path.is_a?(String) && path.bytesize <= 1024
       parts = path.split('/', -1)
-      raise Error, 'Invalid document path.' if parts.empty? || parts.any? { |p| p.empty? || p.start_with?('.') || p.match?(/[\\\x00-\x1f\x7f]/) }
+      raise Error, 'Invalid document path.' if parts.empty? || parts.each_with_index.any? { |p,i| p.empty? || (p.start_with?('.') && !(ProjectbookFolders.page?(path) && i == parts.length-1)) || p.match?(/[\\\x00-\x1f\x7f]/) }
       raise Error, 'This file is reserved.' if Gollum::Page.protected_files.include?(parts.last)
       path
     end
@@ -31,7 +31,7 @@ module Gollum
         identity = ProjectbookTasks.identity(target)
         raise Error, 'Invalid system TODO path.' unless identity && target == ProjectbookTasks.path(*identity)
       else
-        parts.each { |part| ProjectbookCreation.segment!(part) }
+        parts.each_with_index { |part,i| ProjectbookCreation.segment!(part) unless ProjectbookFolders.page?(target) && i == parts.length-1 }
       end
       raise Error, 'Keep a Markdown file extension.' if markdown && Gollum::Page.format_for(target) != :markdown
       prefix = wiki.page_file_dir.to_s.sub(%r{/+\z}, '')
@@ -59,6 +59,7 @@ module Gollum
       raise Error.new('Editing is disabled.', 403) unless wiki.allow_editing
       raise Error, 'Invalid delete request.' unless input.is_a?(Hash)
       target = path!(input['path'])
+      raise Error, 'Use the explicit folder deletion preview and confirmation.' if ProjectbookFolders.page?(target)
       page = wiki.page(target)
       raise Error.new('The document was moved or deleted.', 404) unless page && page.url_path == target
       raise Error, 'Only Markdown documents can be deleted here.' unless page.format == :markdown

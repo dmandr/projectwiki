@@ -69,7 +69,7 @@ module Gollum
     end
 
     def visible?(entry)
-      !entry[:path].split('/').any? { |p| p.start_with?('.', '_') }
+      ProjectbookFolders.page?(entry[:path]) || !entry[:path].split('/').any? { |p| p.start_with?('.', '_') }
     end
 
     def path!(path, root: false)

@@ -1,6 +1,7 @@
 require 'cgi'
 require 'thread'
 require 'gollum/projectbook_titles'
+require 'gollum/projectbook_folders'
 
 module Gollum
   # Navigation needs names, not Page/File objects (which can load large blobs).
@@ -30,6 +31,11 @@ module Gollum
           @html[base_url] ||= yield(entries).freeze
         end
       end
+
+      # An ordinary editable Markdown page doubles as a folder's landing page.
+      def folder_page(path)
+        entries.find { |entry| entry.url_path == "#{path}/.index.md" }
+      end
     end
 
     @cache, @lock = {}, Mutex.new
@@ -49,7 +55,7 @@ module Gollum
           prefix = wiki.page_file_dir.to_s.sub(%r{/+\z}, '')
           previous = cached ? cached.entries.to_h { |item| [item.url_path, item] } : {}
           entries = revision ? wiki.tree_map_for(revision).filter_map do |entry|
-            next if entry.path.split('/').any? { |part| part.start_with?('.') && part != '.gitkeep' }
+            next if entry.path.split('/').any? { |part| part.start_with?('.') && part != '.gitkeep' } && !Gollum::ProjectbookFolders.page?(entry.path)
             next unless Gollum::Page.valid_page_name?(entry.name) ||
               (!entry.name.start_with?('_') && !Gollum::Page.protected_files.include?(entry.name))
             path = entry.path.dup.freeze

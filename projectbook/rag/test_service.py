@@ -93,14 +93,17 @@ class RetrievalTests(unittest.TestCase):
             subprocess.run(['git', 'init', '-q', '-b', 'main', directory], check=True)
             (root / 'note.md').write_text('# Committed')
             (root / '.secret.md').write_text('secret')
+            (root / 'folder').mkdir()
+            (root / 'folder' / '.index.md').write_text('# Folder')
+            (root / '.index.md').write_text('# Hidden root')
             (root / 'alias.md').symlink_to('/etc/passwd')
             subprocess.run(['git', '-C', directory, 'add', '.'], check=True)
             subprocess.run(['git', '-C', directory, '-c', 'user.name=Test', '-c', 'user.email=test@example.com', 'commit', '-qm', 'Fixture'], check=True)
             (root / 'note.md').write_text('# Unsaved')
             with patch.object(service, 'BOOK', directory):
                 entries = service.entries(service.head())
-                self.assertEqual(['note.md'], [e['path'] for e in entries])
-                self.assertEqual(b'# Committed', service.git('cat-file', 'blob', entries[0]['sha']))
+                self.assertEqual(['folder/.index.md', 'note.md'], [e['path'] for e in entries])
+                self.assertEqual(b'# Committed', service.git('cat-file', 'blob', next(e['sha'] for e in entries if e['path'] == 'note.md')))
 
     def test_invalid_queries_rejected_before_model_or_database(self):
         for kwargs in [{'query': ''}, {'query': 'x', 'limit': 100}, {'query': 'x', 'path': '../secret'}, {'query': 'x', 'mode': 'shell'}]:

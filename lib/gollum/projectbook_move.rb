@@ -17,7 +17,15 @@ module Gollum
     def self.prepare(wiki, source:, target:, revision:, content: nil, etag: nil, overrides: {})
       raise Error.new('Editing is disabled.', 403) unless wiki.allow_editing
       source = ProjectbookSave.path!(source); target = ProjectbookSave.path!(target)
-      [source,target].each { |path| path.split('/').each { |part| ProjectbookCreation.segment!(part) } }
+      if ProjectbookFolders.page?(source)
+        raise Error, 'Move the folder to another folder path, keeping .index.md.' unless ProjectbookFolders.page?(target)
+        folder_page = wiki.page(source)
+        raise Error.new('Folder page changed. Reload before moving.',412) if !folder_page || (etag && folder_page.sha != etag)
+        overrides = overrides.merge(source=>content) if content
+        content = nil
+        source = ::File.dirname(source); target = ::File.dirname(target)
+      end
+      [source,target].each { |path| path.split('/').each_with_index { |part,i| ProjectbookCreation.segment!(part) unless ProjectbookFolders.page?(path) && i == path.split('/').length-1 } }
       raise Error, 'Choose a different destination outside the source folder.' if target == source || target.start_with?(source + '/')
       snapshot = ProjectbookKnowledge.new(wiki)
       raise Error.new('The book changed. Refresh the move preview.', 412) unless revision == snapshot.revision

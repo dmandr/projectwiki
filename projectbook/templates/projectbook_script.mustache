@@ -69,7 +69,7 @@
   if (current.startsWith(editPrefix)) current = baseUrl + '/' + current.slice(editPrefix.length);
   for (const link of links) {
     const path = decodeURIComponent(new URL(link.href).pathname).replace(/\/$/, '');
-    if (path === current || (link.hasAttribute('data-document') && path.replace(/\.(md|markdown)$/i, '') === current)) {
+    if (path === current || (path.match(/\.(md|markdown)$/i) && path.replace(/\.(md|markdown)$/i, '') === current)) {
       link.setAttribute('aria-current', 'page');
       link.closest('.projectbook-tree-row, .projectbook-file').classList.add('projectbook-selected');
     }
@@ -194,8 +194,8 @@
   let kind = 'document', busy = false;
   function previewPath(resetFolder = false) {
     const slug = names.slugFromTitle(nameInput.value);
-    const name = kind === 'document' ? (slug ? slug + '.md' : '') : nameInput.value;
-    const parent = resetFolder || kind === 'folder' ? folderSelect.value : pathInput.value.split('/').slice(0, -1).join('/');
+    const name = slug ? slug + (kind === 'document' ? '.md' : '') : '';
+    const parent = resetFolder ? folderSelect.value : pathInput.value.split('/').slice(0, -1).join('/');
     pathInput.value = parent ? parent + '/' + name : name;
     document.getElementById('projectbook-create-path').textContent = '/' + pathInput.value;
   }
@@ -204,14 +204,15 @@
     folderSelect.value = defaultFolder;
     kind = button.dataset.createKind;
     document.getElementById('projectbook-create-title').textContent = kind === 'folder' ? 'New folder' : 'New document';
-    submit.textContent = kind === 'folder' ? 'Create folder' : 'Create and edit';
-    document.querySelector('label[for="projectbook-create-name"]').textContent = kind === 'folder' ? 'Name' : 'Title';
-    document.getElementById('projectbook-create-destination-row').hidden = kind === 'folder';
-    document.getElementById('projectbook-create-hint').textContent = kind === 'folder' ? 'Creates an empty folder in the book.' : 'Title suggests a filename; editing the path generates a title. After creation, Title and Move work independently.';
+    submit.textContent = 'Create and edit';
+    document.querySelector('label[for="projectbook-create-name"]').textContent = 'Title';
+    document.getElementById('projectbook-create-destination-row').hidden = false;
+    document.querySelector('label[for="projectbook-create-destination"]').textContent = kind === 'folder' ? 'Folder path' : 'Document path';
+    document.getElementById('projectbook-create-hint').textContent = kind === 'folder' ? 'Creates an editable folder page with a dynamic Subpages block.' : 'Title suggests a filename; editing the path generates a title. After creation, Title and Move work independently.';
     nameInput.value = ''; error.hidden = true; previewPath(true); dialog.showModal(); nameInput.focus();
   }));
   nameInput.addEventListener('input', () => previewPath());
-  nameInput.addEventListener('blur', () => { if (kind === 'document') nameInput.value = names.titleFromInput(nameInput.value); });
+  nameInput.addEventListener('blur', () => { nameInput.value = names.titleFromInput(nameInput.value); });
   pathInput.addEventListener('input', () => {
     nameInput.value = names.titleFromPath(pathInput.value);
     const parent = pathInput.value.replace(/^\/+/, '').split('/').slice(0, -1).join('/');
@@ -230,14 +231,14 @@
     busy = true; submit.disabled = true; error.hidden = true;
     try {
       let destination = pathInput.value.replace(/^\/+/, '');
-      if (!/\.md$/i.test(destination)) destination += '.md';
-      const input = kind === 'document' ? {kind, title: names.titleFromInput(nameInput.value), path: destination} : {kind, folder: folderSelect.value, name: nameInput.value};
+      if (kind === 'document' && !/\.md$/i.test(destination)) destination += '.md';
+      const input = {kind, title: names.titleFromInput(nameInput.value), path: destination};
       const response = await fetch(baseUrl + '/gollum/projectbook/new', {method: 'POST', headers: {'Content-Type': 'application/json', 'X-ProjectWiki-Request': '1'}, body: JSON.stringify(input)});
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result.error || 'Could not create: HTTP ' + response.status);
       // Expand the destination path on the next page without disturbing other branches.
       const parts = (kind === 'document' ? destination.split('/').slice(0, -1).join('/') : folderSelect.value).split('/').filter(Boolean);
-      if (kind === 'folder') parts.push(nameInput.value);
+      if (kind === 'folder') parts.splice(0,parts.length,...destination.split('/'));
       parts.forEach((_, index) => { state[parts.slice(0, index + 1).join('/')] = true; }); save();
       location.assign(result.url);
     } catch (failure) {
