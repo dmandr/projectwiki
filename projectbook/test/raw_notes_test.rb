@@ -127,3 +127,12 @@ class RawNotesTest < Minitest::Test
     assert_equal 'mcp',snapshot.read_raw_note(id:ID)['source']
   end
 end
+class RawNotesTest
+  def test_document_attachments_in_chat
+    bytes='%PDF-1.4 test';file=upload(bytes).merge('name'=>'measurement.pdf','mime_type'=>'application/pdf')
+    note=service.create(wiki,{'id'=>ID,'text'=>'Measurements','attachments'=>[file]}, {})
+    assert_equal 'application/pdf',note['attachments'][0]['mime_type']
+    assert_includes wiki.page(note['path']).text_data,'[document-01.pdf](media/document-01.pdf)'
+    assert_equal bytes,wiki.file(note['attachments'][0]['path']).raw_data
+  end
+end

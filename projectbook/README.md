@@ -528,3 +528,13 @@ new UUID, so replacing an image does not overwrite images used by other pages.
 Deleting a page leaves shared attachments intact. Existing `assets/`, `uploads/`
 and Raw Notes media are unchanged; migration and unused-file cleanup are separate
 operations. See [Shared Git assets](SHARED-ASSETS.md) for implementation details.
+
+### Raw Notes chat controls
+
+Saved messages appear as chronological chat bubbles. The bottom composer has a
+`+` menu for Camera, Photos and Files (photos, audio, PDF, TXT and DOCX; no video).
+Record shows a red recording indicator, elapsed time and live microphone level;
+Stop adds the clip to the draft for listening before Send. A recording requires
+HTTPS or localhost and microphone permission. Send is disabled during recording
+and while permission is pending. The original audio remains in Git; this does
+not perform transcription.

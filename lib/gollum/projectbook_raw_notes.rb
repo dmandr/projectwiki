@@ -10,7 +10,7 @@ module Gollum
     MAX_FILE = 20 * 1024 * 1024
     MAX_TOTAL = 50 * 1024 * 1024
     UUID = /\A[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}\z/
-    TYPES = {'image/jpeg'=>'jpg','image/png'=>'png','image/webp'=>'webp','image/heic'=>'heic','image/heif'=>'heif','audio/mp4'=>'m4a','audio/mpeg'=>'mp3','audio/webm'=>'webm','audio/ogg'=>'ogg','audio/wav'=>'wav','audio/x-wav'=>'wav'}.freeze
+    TYPES = {'image/jpeg'=>'jpg','image/png'=>'png','image/webp'=>'webp','image/heic'=>'heic','image/heif'=>'heif','audio/mp4'=>'m4a','audio/mpeg'=>'mp3','audio/webm'=>'webm','audio/ogg'=>'ogg','audio/wav'=>'wav','audio/x-wav'=>'wav','application/pdf'=>'pdf','text/plain'=>'txt','application/vnd.openxmlformats-officedocument.wordprocessingml.document'=>'docx'}.freeze
     def self.id!(id)
       raise Error, 'Use a UUID request/file ID.' unless id.is_a?(String) && UUID.match?(id)
       id
@@ -102,7 +102,7 @@ module Gollum
       files.each_with_index do |file,i|
         mime = file.fetch('mime_type','').split(';').first
         ext = TYPES[mime]
-        raise Error, 'Only photos and audio are supported; video is deferred.' unless ext
+        raise Error, 'Use photos, audio, PDF, TXT or DOCX; video is deferred.' unless ext
         id!(file['upload_id'])
         path = ::File.join(stage(wiki),file['upload_id'])
         raise Error, 'Attachment upload expired. Upload it again.' unless ::File.file?(path)
@@ -111,7 +111,7 @@ module Gollum
         raise Error, 'Attachment checksum mismatch.' unless file['sha256'] == Digest::SHA256.hexdigest(bytes)
         total += bytes.bytesize
         raise Error, 'Note exceeds 50 MiB.' if total > MAX_TOTAL
-        name = "#{mime.start_with?('image/') ? 'photo' : 'voice'}-#{prefix+format('%02d',i+1)}.#{ext}"
+        name = "#{mime.start_with?('image/') ? 'photo' : mime.start_with?('audio/') ? 'voice' : 'document'}-#{prefix+format('%02d',i+1)}.#{ext}"
         prepared << [folder+'/media/'+name, bytes, mime, name]
       end
       prepared

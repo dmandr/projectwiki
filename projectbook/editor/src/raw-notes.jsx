@@ -13,7 +13,7 @@ const makeDraft=()=>({id:crypto.randomUUID(),title:'',text:'',files:[]});
 const bytes64=bytes=>{let result='';for(let i=0;i<bytes.length;i++)result+=String.fromCharCode(bytes[i]);return btoa(result);};
 function Media({item}){
  const [url,setURL]=useState('');useEffect(()=>{const value=URL.createObjectURL(item.blob);setURL(value);return()=>URL.revokeObjectURL(value);},[item.blob]);
- return item.mime_type.startsWith('image/')?<img src={url} alt={item.name}/>:<audio src={url} controls preload="metadata"/>;
+ return item.mime_type.startsWith('image/')?<img src={url} alt={item.name}/>:item.mime_type.startsWith('audio/')?<audio src={url} controls preload="metadata"/>:<a href={url} download={item.name}>📄 {item.name}</a>;
 }
 async function photo(file,original){
  if(original||!file.type.startsWith('image/'))return {blob:file,name:file.name,mime_type:file.type};
@@ -27,29 +27,42 @@ async function photo(file,original){
  }catch{return {blob:file,name:file.name,mime_type:file.type||(/\.heic$/i.test(file.name)?'image/heic':''),warning:'Could not resize; keeping the original.'};}
  finally{URL.revokeObjectURL(url);}
 }
+function RecordingStatus({stream}){
+ const [elapsed,setElapsed]=useState(0),[level,setLevel]=useState(0);
+ useEffect(()=>{const started=Date.now();let context,analyser,samples;
+  try{const AudioContext=window.AudioContext||window.webkitAudioContext;context=new AudioContext();analyser=context.createAnalyser();analyser.fftSize=256;samples=new Uint8Array(analyser.fftSize);context.createMediaStreamSource(stream).connect(analyser);void context.resume().catch(()=>{});}catch{}
+  const timer=setInterval(()=>{setElapsed(Math.floor((Date.now()-started)/1000));if(analyser){analyser.getByteTimeDomainData(samples);const rms=Math.sqrt(samples.reduce((n,v)=>n+((v-128)/128)**2,0)/samples.length);setLevel(Math.min(1,rms*5));}},100);
+  return()=>{clearInterval(timer);void context?.close().catch(()=>{});};
+ },[stream]);
+ return <div className="raw-recording" role="region" aria-label="Voice recording"><span className="raw-recording-dot" aria-hidden="true"/><strong>Recording</strong><time aria-label="Recording duration">{String(Math.floor(elapsed/60)).padStart(2,'0')}:{String(elapsed%60).padStart(2,'0')}</time><meter min="0" max="1" value={level} aria-label="Microphone level"/><span>Microphone is on</span></div>;
+}
 function Capture({noteId=''}){
  const key=base+':raw-note'+(noteId?':'+noteId:'');
  const [note,setNote]=useState(null),[loadError,setLoadError]=useState('');
  useEffect(()=>{if(noteId)api(noteId).then(setNote).catch(e=>setLoadError(e.message));},[noteId]);
  const [draft,setDraft]=useState(makeDraft),[ready,setReady]=useState(false),[notice,setNotice]=useState(''),[busy,setBusy]=useState(false),[recording,setRecording]=useState(false),[original,setOriginal]=useState(false),[local,setLocal]=useState('');
+ const [menu,setMenu]=useState(false),[starting,setStarting]=useState(false);
+ const microphoneRequest=useRef(0);
  const recorder=useRef(),stream=useRef(),saveQueue=useRef(Promise.resolve()),saved=useRef(false),latest=useRef(draft);latest.current=draft;
- useEffect(()=>{draftStore('get',key).then(d=>{if(d){setDraft(d);setNotice('Restored your local draft.');}}).catch(()=>setLocal('Browser draft storage is unavailable. Keep this tab open.')).finally(()=>setReady(true));return()=>{if(recorder.current?.state==='recording')recorder.current.stop();stream.current?.getTracks().forEach(t=>t.stop());};},[]);
+ useEffect(()=>{draftStore('get',key).then(d=>{if(d){setDraft(d);setNotice('Restored your local draft.');}}).catch(()=>setLocal('Browser draft storage is unavailable. Keep this tab open.')).finally(()=>setReady(true));return()=>{microphoneRequest.current++;if(recorder.current?.state==='recording')recorder.current.stop();stream.current?.getTracks().forEach(t=>t.stop());};},[]);
  useEffect(()=>{if(!ready||saved.current)return;saveQueue.current=saveQueue.current.catch(()=>{}).then(()=>draftStore('put',key,draft)).then(()=>setLocal('Unsent message saved on this device')).catch(()=>setLocal('Draft could not be stored. Keep this tab open.'));},[draft,ready]);
  useEffect(()=>{const warn=e=>{if(!saved.current&&(latest.current.text||latest.current.files.length||recorder.current?.state==='recording')){e.preventDefault();e.returnValue='';}};window.addEventListener('beforeunload',warn);return()=>window.removeEventListener('beforeunload',warn);},[]);
  function append(item){if(item.blob.size>20*1024*1024){setNotice('File exceeds 20 MiB. Choose a smaller file.');return;}setDraft(d=>({...d,files:[...d.files,{...item,upload_id:crypto.randomUUID()}]}));}
- async function addFiles(event){const files=[...event.target.files];event.target.value='';setBusy(true);setNotice('Preparing attachments…');try{for(const file of files){const audioTypes={m4a:'audio/mp4',mp3:'audio/mpeg',wav:'audio/wav',ogg:'audio/ogg',webm:'audio/webm'};const type=file.type||audioTypes[file.name.split('.').pop().toLowerCase()]||'';if(!/^(image|audio)\//.test(type)&&!(/\.heic$/i.test(file.name)))throw Error('Only photos and audio are supported.');append(await photo(type!==file.type?new File([file],file.name,{type}):file,original));}setNotice('');}catch(e){setNotice(e.message);}finally{setBusy(false);}}
+ async function addFiles(event){const files=[...event.target.files];event.target.value='';setMenu(false);setBusy(true);setNotice('Preparing attachments…');try{for(const file of files){const audioTypes={m4a:'audio/mp4',mp3:'audio/mpeg',wav:'audio/wav',ogg:'audio/ogg',webm:'audio/webm'};const type=file.type||({pdf:'application/pdf',txt:'text/plain',docx:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'}[file.name.split('.').pop().toLowerCase()])||audioTypes[file.name.split('.').pop().toLowerCase()]||'';if(!/^(image|audio)\//.test(type)&&!['application/pdf','text/plain','application/vnd.openxmlformats-officedocument.wordprocessingml.document'].includes(type)&&!(/\.heic$/i.test(file.name)))throw Error('Use photos, audio, PDF, TXT or DOCX. Video is not supported yet.');append(await photo(type!==file.type?new File([file],file.name,{type}):file,original));}setNotice('');}catch(e){setNotice(e.message);}finally{setBusy(false);}}
  async function record(){
  if(recording){recorder.current.stop();return;}
+ if(starting){microphoneRequest.current++;setStarting(false);setNotice('Microphone request canceled.');return;}const attempt=++microphoneRequest.current;setStarting(true);setMenu(false);setNotice('Waiting for microphone permission…');
  try{
   if(!navigator.mediaDevices?.getUserMedia||!window.MediaRecorder)throw Error('Voice recording requires HTTPS (or localhost) and a supported browser. You can also attach an audio file.');
-  stream.current=await navigator.mediaDevices.getUserMedia({audio:true});
+  const media=await navigator.mediaDevices.getUserMedia({audio:true});
+  if(attempt!==microphoneRequest.current){media.getTracks().forEach(t=>t.stop());return;}stream.current=media;
   const mime=['audio/mp4','audio/webm;codecs=opus','audio/webm','audio/ogg;codecs=opus'].find(t=>MediaRecorder.isTypeSupported(t));
   const rec=new MediaRecorder(stream.current,mime?{mimeType:mime}:undefined);recorder.current=rec;let parts=[],size=0;
   rec.ondataavailable=e=>{if(e.data.size){parts.push(e.data);size+=e.data.size;if(size>=18*1024*1024&&rec.state==='recording'){rec.stop();setNotice('Recording stopped at the size limit.');}}};
   rec.onerror=()=>{setNotice('Recording was interrupted. Check the recorded clip before saving.');stream.current?.getTracks().forEach(t=>t.stop());setRecording(false);};
   rec.onstop=()=>{stream.current?.getTracks().forEach(t=>t.stop());setRecording(false);setNotice('Recording added. You can listen before saving.');const type=rec.mimeType.split(';')[0],blob=new Blob(parts,{type});if(blob.size)append({blob,name:'Voice recording',mime_type:type});};
   rec.start(1000);setRecording(true);setNotice('Recording… keep this page open until you stop.');
- }catch(e){stream.current?.getTracks().forEach(t=>t.stop());setNotice(e.message);}
+ }catch(e){if(attempt===microphoneRequest.current){stream.current?.getTracks().forEach(t=>t.stop());setNotice(e.message);}}finally{if(attempt===microphoneRequest.current)setStarting(false);}
  }
  async function save(){setBusy(true);setNotice('Uploading…');try{
   if(draft.files.length>20||draft.files.reduce((n,f)=>n+f.blob.size,0)>50*1024*1024)throw Error('Use at most 20 files and 50 MiB per note.');
@@ -72,17 +85,22 @@ function Capture({noteId=''}){
   <fieldset disabled={busy}>
    {!noteId&&<label>Title <span>(optional)</span><input value={draft.title} maxLength={200} placeholder="Date and time if left blank" onChange={e=>setDraft({...draft,title:e.target.value})}/></label>}
    <div className="raw-media" aria-label="Attachments for the next message">{draft.files.map(f=><figure key={f.upload_id}><Media item={f}/><figcaption>{f.name} · {(f.blob.size/1024).toFixed(0)} KiB {f.warning&&<span>{f.warning}</span>}</figcaption><button type="button" className="btn" aria-label={'Remove '+f.name} onClick={()=>setDraft(d=>({...d,files:d.files.filter(a=>a.upload_id!==f.upload_id)}))}>Remove</button></figure>)}</div>
-   <div className="raw-add"><label>Text<textarea rows={4} value={draft.text} placeholder="Comments, measurements, observations…" onChange={e=>setDraft({...draft,text:e.target.value})}/></label><h2>Add to your message</h2>
-    <div className="raw-tools">
-     <button type="button" className="btn" aria-pressed={recording} onClick={record}>{recording?'■ Stop recording':'● Record voice'}</button>
-     <label className="btn">Take photo<input aria-label="Take photo" type="file" accept="image/*" capture="environment" onChange={addFiles}/></label>
-     <label className="btn">Photo library<input aria-label="Photo library" type="file" accept="image/*" multiple onChange={addFiles}/></label>
-     <label className="btn">Audio file<input aria-label="Audio file" type="file" accept="audio/*,.m4a,.mp3,.wav,.ogg,.webm" multiple onChange={addFiles}/></label>
+   <div className="raw-add raw-composer-box">
+    {recording&&<RecordingStatus stream={stream.current}/>}
+    <label className="raw-text-label"><span className="raw-sr-only">Message</span><textarea rows={3} value={draft.text} placeholder="Message…" onChange={e=>setDraft({...draft,text:e.target.value})}/></label>
+    {menu&&<div className="raw-attachment-menu" role="group" aria-label="Add attachment">
+     <label className="btn">Camera<input aria-label="Take photo" type="file" accept="image/*" capture="environment" onChange={addFiles}/></label>
+     <label className="btn">Photos<input aria-label="Photo library" type="file" accept="image/*" multiple onChange={addFiles}/></label>
+     <label className="btn">Files<input aria-label="Add files" type="file" accept="image/*,audio/*,.m4a,.mp3,.wav,.ogg,.webm,.pdf,.txt,.docx" multiple onChange={addFiles}/></label>
+     <label className="raw-original"><input type="checkbox" checked={original} onChange={e=>setOriginal(e.target.checked)}/> Keep original photos</label>
+     <small>Photos resize to 2048 px by default. Video is not supported yet.</small>
+    </div>}
+    <div className="raw-composer-actions">
+     <button type="button" className="btn raw-icon" title="Add photos or files" aria-label="Add attachment" aria-expanded={menu} onClick={()=>setMenu(!menu)}>＋</button>
+     <button type="button" className={'btn raw-record-button'+(recording?' is-recording':'')} aria-pressed={recording} onClick={record} title={recording?'Stop recording':'Record voice'}>{starting?'Cancel microphone request':recording?'■ Stop':'● Record'}</button>
+     <button type="button" className="btn btn-primary raw-save" disabled={recording||starting||(!draft.text.trim()&&!draft.files.length)} onClick={save}>{busy?'Sending…':'Send ↑'}</button>
     </div>
-    <label className="raw-original"><input type="checkbox" checked={original} onChange={e=>setOriginal(e.target.checked)}/> Keep original photos (otherwise resize to 2048 px)</label>
-    <p className="raw-hint">Photos and audio only. Your device provides the file picker; video is not supported yet.</p>
    </div>
-   <button type="button" className="btn btn-primary raw-save" disabled={recording||(!draft.text.trim()&&!draft.files.length)} onClick={save}>{busy?'Sending…':'Send'}</button>
   </fieldset><p className="raw-local">{local}</p><p role="status" aria-live="polite">{notice}</p>
  </section>;
 }
@@ -113,3 +131,5 @@ const mount=document.getElementById('projectbook-raw-notes');if(mount)createRoot
 const noteMatch=location.pathname.slice(base.length).match(/^\/raw-notes\/\d{4}-\d{2}-\d{2}-([0-9a-f-]{36})\/note(?:\.md)?$/);
 if(noteMatch){const content=document.querySelector('#wiki-content')||document.querySelector('.markdown-body')?.parentElement;if(content){const composer=document.createElement('div');content.append(composer);createRoot(composer).render(<Capture noteId={noteMatch[1]}/>);document.body.classList.add('raw-note-chat');}}
 if(location.pathname.includes('/raw-notes/'))document.querySelectorAll('.markdown-body a').forEach(link=>{const url=new URL(link.href,location.href);if(url.origin===location.origin&&/\/media\/voice-[0-9a-f-]+\.(m4a|mp3|webm|ogg|wav)$/.test(url.pathname)){const audio=document.createElement('audio');audio.controls=true;audio.preload='metadata';audio.src=base+'/'+url.pathname.replace(/^.*?(raw-notes\/)/,'$1');link.after(audio);}});
+
+if(noteMatch){const body=document.querySelector('#wiki-body .markdown-body')||document.querySelector('#wiki-body');if(body){const nodes=[...body.childNodes];let bubble;for(const node of nodes){if(node.nodeName==='HR'){bubble=null;node.remove();continue;}if(!bubble && node.nodeType===3 && !node.textContent.trim()){node.remove();continue;}if(!bubble){bubble=document.createElement('article');bubble.className='raw-message';bubble.setAttribute('aria-label','Note message');body.append(bubble);}bubble.append(node);}}}
