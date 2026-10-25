@@ -44,7 +44,7 @@ function Capture(){
   const rec=new MediaRecorder(stream.current,mime?{mimeType:mime}:undefined);recorder.current=rec;let parts=[],size=0;
   rec.ondataavailable=e=>{if(e.data.size){parts.push(e.data);size+=e.data.size;if(size>=18*1024*1024&&rec.state==='recording'){rec.stop();setNotice('Recording stopped at the size limit.');}}};
   rec.onerror=()=>{setNotice('Recording was interrupted. Check the recorded clip before saving.');stream.current?.getTracks().forEach(t=>t.stop());setRecording(false);};
-  rec.onstop=()=>{stream.current?.getTracks().forEach(t=>t.stop());setRecording(false);const type=rec.mimeType.split(';')[0],blob=new Blob(parts,{type});if(blob.size)append({blob,name:'Voice recording',mime_type:type});};
+  rec.onstop=()=>{stream.current?.getTracks().forEach(t=>t.stop());setRecording(false);setNotice('Recording added. You can listen before saving.');const type=rec.mimeType.split(';')[0],blob=new Blob(parts,{type});if(blob.size)append({blob,name:'Voice recording',mime_type:type});};
   rec.start(1000);setRecording(true);setNotice('Recording… keep this page open until you stop.');
  }catch(e){stream.current?.getTracks().forEach(t=>t.stop());setNotice(e.message);}
  }
