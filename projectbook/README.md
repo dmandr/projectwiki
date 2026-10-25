@@ -533,8 +533,8 @@ operations. See [Shared Git assets](SHARED-ASSETS.md) for implementation details
 
 Saved messages appear as chronological chat bubbles. The bottom composer has a
 `+` menu for Camera, Photos and Files (photos, audio, PDF, TXT and DOCX; no video).
-Record shows a red recording indicator, elapsed time and live microphone level;
+Record shows a red recording indicator, elapsed time and a scrolling waveform from the live microphone;
 Stop adds the clip to the draft for listening before Send. A recording requires
-HTTPS or localhost and microphone permission. Send is disabled during recording
-and while permission is pending. The original audio remains in Git; this does
+HTTPS or localhost and microphone permission. Send during recording stops capture, waits for the final audio fragment and sends
+the message. Send is disabled while microphone permission is pending. The original audio remains in Git; this does
 not perform transcription.
