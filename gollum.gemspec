@@ -79,6 +79,9 @@ Gem::Specification.new do |s|
     lib/gollum/assets.rb
     lib/gollum/navigation_index.rb
     lib/gollum/projectbook_creation.rb
+    lib/gollum/projectbook_raw_notes.rb
+    lib/gollum/views/raw_notes.rb
+    lib/gollum/templates/raw_notes.mustache
     lib/gollum/projectbook_tasks.rb
     lib/gollum/projectbook_task_migration.rb
     lib/gollum/views/tasks.rb
@@ -89,6 +92,7 @@ Gem::Specification.new do |s|
     lib/gollum/projectbook_mcp.rb
     lib/gollum/projectbook_callouts.rb
     lib/gollum/projectbook_tree.rb
+    lib/gollum/projectbook_move.rb
     lib/gollum/projectbook_settings.rb
     lib/gollum/helpers.rb
     lib/gollum/locales/cn.yml

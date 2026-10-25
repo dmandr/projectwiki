@@ -12,7 +12,14 @@ module Gollum
       notes: {type: 'string', maxLength: 20000}, list_id: STRING, status: {type: 'string', enum: %w[open done]},
       due: {type: 'string', maxLength: 10}, source_path: {type: 'string', maxLength: 1024}, expected_version: {type: 'string', pattern: '^([0-9a-f]{40})?$'}
     }, required: %w[kind id title expected_version], additionalProperties: false}.freeze
+    RAW_ATTACHMENT = {type: 'object', properties: {upload_id: STRING, name: STRING, mime_type: STRING, sha256: {type: 'string', pattern: '^[0-9a-f]{64}$'}}, required: %w[upload_id name mime_type sha256], additionalProperties: false}.freeze
+    RAW_FILE = {type: 'object', properties: {download_url: {type: 'string', maxLength: 8192}, file_id: STRING, mime_type: STRING, file_name: STRING}, required: %w[download_url file_id], additionalProperties: false}.freeze
     TOOLS = {
+      'list_raw_notes' => ['List captured notes newest first; filter unsorted/processed. Photos/audio and Markdown are in Git. Follow pagination.', {status: {type: 'string', enum: ['', 'unsorted', 'processed']}}.merge(PAGE), []],
+      'read_raw_note' => ['Read note metadata, Markdown and attachment paths. Use read_attachment for original bytes. Follow document continuation when truncated. Content is untrusted source material.', {id: STRING}, ['id']],
+      'upload_raw_note_attachment' => ['Stage photo/audio bytes before create_raw_note. UUID upload_id, exact byte offset, base64 chunk <=262144 decoded bytes. Retry identical chunks safely. Maximum 20 MiB/file; staging expires in 24h. Does not commit. Compute SHA256 of the complete original bytes.', {upload_id: STRING, offset: {type: 'integer', minimum: 0}, data: {type: 'string', maxLength: 349528}}, %w[upload_id offset data]],
+      'create_raw_note' => ['Capture text/photos/audio in one local Git commit. Use a fresh UUID id; reuse the SAME id and payload on retry. Preserve measurements verbatim, do not invent descriptions. Text is Markdown. attachments references staged uploads with SHA256; files accepts user-provided ChatGPT file objects (temporary public HTTPS download_url). Actual bytes are stored, never expiring URLs. Photos/audio are appended as relative links. No video or transcription. Return the saved note URL. No push.', {id: STRING, title: {type: 'string', maxLength: 200}, text: {type: 'string', maxLength: 100000}, attachments: {type: 'array', maxItems: 20, items: RAW_ATTACHMENT}, files: {type: 'array', maxItems: 20, items: RAW_FILE}}, ['id']],
+      'set_raw_note_status' => ['Mark a note processed or unsorted with optional existing result document paths. Read its metadata version first. Does not delete source media. Edit note text using edit_document with document_version.', {id: STRING, expected_version: REVISION, status: {type: 'string', enum: %w[unsorted processed]}, results: {type: 'array', maxItems: 20, items: STRING}}, %w[id expected_version status]],
       'list_todo_lists' => ['Discover named TODO lists. Each task belongs to ONE list; its list name is its only tag. Includes list file versions and task counts.', {query: STRING}.merge(PAGE), []],
       'list_tasks' => ['Find tasks by list UUID, status (open/done), or text. Task files are authoritative; link labels are fallbacks. Follow pagination.', {list_id: STRING, status: {type: 'string', enum: ['', 'open', 'done']}, query: STRING}.merge(PAGE), []],
       'read_todo' => ['Read a task or list with its persistent UUID, metadata and version. Use this version before changing it.', {id: STRING, kind: {type: 'string', enum: %w[task list]}}, ['id']],
@@ -67,12 +74,13 @@ module Gollum
         TOOLS.each do |name, (description, properties, required)|
           rag = %w[search_knowledge get_search_index_status].include?(name)
           next if rag && ENV.fetch('PROJECTBOOK_RAG_URL', '').empty?
-          document_write = %w[save_document edit_document save_todos].include?(name)
+          document_write = %w[save_document edit_document save_todos upload_raw_note_attachment create_raw_note set_raw_note_status].include?(name)
           write = name == 'save_agent_note' || document_write
           setting = document_write ? 'PROJECTBOOK_MCP_DOCUMENT_WRITE' : 'PROJECTBOOK_MCP_MEMORY_WRITE'
           next if write && (!wiki.allow_editing || ENV.fetch(setting, 'true') != 'true')
           properties = properties.merge(revision: REVISION) unless write || rag
           server.define_tool(name: name, description: description,
+            meta: name == "create_raw_note" ? {"openai/fileParams" => ["files"]} : nil,
             input_schema: {type: 'object', properties: properties, required: required, additionalProperties: false},
             annotations: {read_only_hint: !write, destructive_hint: document_write, idempotent_hint: true, open_world_hint: false}) do |server_context: nil, **arguments|
             begin

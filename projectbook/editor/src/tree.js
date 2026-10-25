@@ -1,4 +1,4 @@
-import {rebaseMarkdown} from './move-links.mjs';
+import {confirmMove} from './move-preview.mjs';
 import {dropIntent, parentPath} from './tree-drag.mjs';
 
 const tree = document.getElementById('projectbook-tree');
@@ -52,7 +52,7 @@ if (tree?.dataset.editable === 'true' && !document.getElementById('gollum-editor
       const rect = row.getBoundingClientRect();
       intent = dropIntent(rowPath(source),rowPath(targetRow),targetRow.hasAttribute('data-folder'),(event.clientY-rect.top)/rect.height);
     }
-    if (!intent || (intent.action === 'move' && source.hasAttribute('data-folder'))) { clear(); return; }
+    if (!intent || (intent.action === 'move' && (intent.folder === rowPath(source) || intent.folder.startsWith(rowPath(source)+'/')))) { clear(); return; }
     event.preventDefault(); event.dataTransfer.dropEffect = 'move';
     const marker = targetRow === root ? root : rowLink(targetRow);
     marker.classList.add(intent.action === 'move' ? 'pb-drop-inside' : 'pb-drop-' + intent.position);
@@ -67,10 +67,9 @@ if (tree?.dataset.editable === 'true' && !document.getElementById('gollum-editor
       if (operation.action === 'move') {
         const settings = await api('/gollum/projectbook/settings/navigation');
         const destination = [operation.folder, operation.source.split('/').at(-1)].filter(Boolean).join('/');
-        if (settings.confirm_move && !window.confirm('Move ' + operation.source + '\nto ' + destination + '?\n\nLinks inside this document will be adjusted. Links to it from other documents are not changed.')) { notice.textContent = 'Move canceled.'; return; }
-        const doc = await api('/gollum/projectbook/tree/document?path=' + encodeURIComponent(operation.source));
-        if (doc.revision !== revision) throw new Error('The book changed. Reload the tree and try again.');
-        operation.content = doc.content === null ? null : rebaseMarkdown(doc.content,operation.source,destination); operation.etag = doc.etag;
+        notice.textContent='Checking links…';
+        const preview=await api('/gollum/projectbook/move/preview',{source:operation.source,target:destination,revision});
+        if(settings.confirm_move && !await confirmMove(preview,operation.source,destination)){notice.textContent='Move canceled.';return;}
       } else {
         const siblings = [...item.parentElement.children].filter(row => row !== item);
         const index = siblings.indexOf(target) + (operation.position === 'after' ? 1 : 0);
@@ -86,7 +85,9 @@ if (tree?.dataset.editable === 'true' && !document.getElementById('gollum-editor
         const key = 'projectwiki:tree:v2:' + base;
         try { const state = JSON.parse(localStorage.getItem(key) || '{}'); const parts = operation.folder.split('/').filter(Boolean); parts.forEach((_,i) => state[parts.slice(0,i+1).join('/')] = true); localStorage.setItem(key,JSON.stringify(state)); } catch (_) {}
         const current = item.querySelector('[aria-current="page"]');
-        if (current) location.assign(base + (/\.(md|markdown)$/i.test(result.path) ? '/' : '/gollum/file/') + result.path.split('/').map(encodeURIComponent).join('/'));
+        const oldPath=current?.dataset.document || current?.dataset.folderLink;
+        const newPath=oldPath ? result.path+oldPath.slice(operation.source.length) : null;
+        if (current) location.assign(base + (/\.(md|markdown)$/i.test(newPath) ? '/' : current.dataset.folderLink ? '/gollum/overview/' : '/gollum/file/') + newPath.split('/').map(encodeURIComponent).join('/'));
         else location.reload();
       }
     } catch (error) { notice.textContent = error instanceof TypeError ? 'No server confirmation. Reload to check whether the change was saved.' : error.message; }

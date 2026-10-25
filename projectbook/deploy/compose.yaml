@@ -1,0 +1,27 @@
+name: projectbook-cloud
+services:
+  wiki:
+    image: ${PROJECTBOOK_IMAGE:?Set a versioned image}
+    init: true
+    restart: unless-stopped
+    volumes:
+      - ./book:/wiki
+      - app-settings:/var/lib/projectbook
+    environment:
+      APP_ENV: production
+      GOLLUM_REF: main
+      PROJECTBOOK_PUBLIC_URL: ${PROJECTBOOK_PUBLIC_URL:-}
+      PROJECTBOOK_RAW_UPLOADS: /var/lib/projectbook/raw-uploads
+      PROJECTBOOK_MCP_TOKEN: ${PROJECTBOOK_MCP_TOKEN:?Set an MCP token}
+    networks: [book]
+  proxy:
+    image: nginx:1.28-alpine
+    restart: unless-stopped
+    ports: ['127.0.0.1:8092:80']
+    volumes: ['./nginx.conf:/etc/nginx/conf.d/default.conf:ro']
+    depends_on: [wiki]
+    networks: [book]
+networks:
+  book:
+volumes:
+  app-settings:

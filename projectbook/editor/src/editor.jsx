@@ -9,6 +9,7 @@ import { $createRangeSelection, $setSelection, $getSelection, $isRangeSelection 
 import { EditorView } from '@codemirror/view';
 import { draftStore } from './drafts';
 import { rebaseMarkdown } from './move-links.mjs';
+import {confirmMove} from './move-preview.mjs';
 import { documentTitle, withDocumentTitle } from './document-title.mjs';
 import { titleFromPath } from './names.mjs';
 import { imageDimensionsPlugin, ImageToolbar } from './image-dimensions';
@@ -244,12 +245,22 @@ if (document.getElementById('projectbook-editor-app')) {
       if (isNew && (!name.current.trim() || /[\\/]/.test(name.current) || !/\.md$/i.test(name.current.trim()))) { setStatus('Enter a Markdown filename ending in .md, without folder separators.'); return; }
       working.current = true; setBusy(true); setStatus('Preparing save…');
       let content;
-      try { content = rebaseMarkdown(documentTitle(current.current, '') ? current.current : withDocumentTitle(current.current, fallbackTitle), path, savePath); }
+      try { content = documentTitle(current.current, '') ? current.current : withDocumentTitle(current.current, fallbackTitle); if(isNew)content=rebaseMarkdown(content,path,savePath); }
       catch (_) { working.current = false; setBusy(false); setStatus('Could not update relative links. Keep the current path and save your edits first.'); return; }
       // An undone/deleted insertion must not leave an orphan in the Git book.
       const used = pending.current.filter(file => current.current.includes(file.source));
+      let moveRevision;
+      if(!isNew && savePath!==path){
+        try{
+          setStatus('Checking links…');
+          const response=await fetch(base+'/gollum/projectbook/move/preview',{method:'POST',headers:{'Content-Type':'application/json','X-ProjectWiki-Request':'1'},body:JSON.stringify({source:path,target:savePath,content,etag:form.dataset.etag})});
+          const preview=await response.json();if(!response.ok)throw new Error(preview.error || 'Move preview failed.');
+          if(!await confirmMove(preview,path,savePath)){working.current=false;setBusy(false);setStatus('Move canceled.');return;}
+          moveRevision=preview.revision;
+        }catch(error){working.current=false;setBusy(false);setStatus(error.message);return;}
+      }
       const data = new FormData();
-      data.append('document', JSON.stringify({path: savePath, source_path: path, content, todos: pendingTodos(todos.pending(), current.current, path), create: isNew, etag: form.dataset.etag, attachments: used.map(file => ({path: file.path}))}));
+      data.append('document', JSON.stringify({path: savePath, source_path: path, content, move_revision:moveRevision, todos: pendingTodos(todos.pending(), current.current, path), create: isNew, etag: form.dataset.etag, attachments: used.map(file => ({path: file.path}))}));
       data.append('message', !isNew && savePath !== path && summary === `Updated ${path}` ? `Move ${path} to ${savePath}` : summary === `Created ${path}` ? `Created ${savePath}` : summary || `Updated ${savePath}`);
       used.forEach(file => data.append('files[]', file.blob, file.name));
       try {
@@ -342,7 +353,7 @@ if (document.getElementById('projectbook-editor-app')) {
         <p>New path: <strong>/{movePath.trim().replace(/^\//, '')}</strong></p>
         <p>Use a full path from the book root, including the Markdown extension. Missing folders will be created.</p>
         <p>{isNew ? 'This chooses where the document will be saved. Nothing is created until Save.' : 'The document and any unsaved edits will be saved together at the new path. The old file will be removed.'}</p>
-        <p>Relative links and images inside this document will be adjusted. Links from other documents are not changed.</p>
+        <p>Links inside this document and incoming links elsewhere in the book will be updated. Review affected files before confirming.</p>
         <div role="status" className="pb-editor-status">{status}</div>
         <div className="pb-editor-actions">
           <button type="button" className="btn" disabled={busy} onClick={() => setMoveOpen(false)}>Cancel</button>
@@ -351,7 +362,7 @@ if (document.getElementById('projectbook-editor-app')) {
               const next = movePath.trim().replace(/^\//, '');
               if (isNew) { destination.current = next; name.current = next.split('/').pop(); setFilename(name.current); setMoveOpen(false); stashSoon(); }
               else save(null, next);
-            }}>{isNew ? 'Use this path' : 'Save and move'}</button>
+            }}>{isNew ? 'Use this path' : 'Preview move'}</button>
         </div>
       </dialog>}
       {draft && <div className="pb-draft-banner">A browser draft is available. <button type="button" className="btn btn-sm" disabled={busy} onClick={restore}>Restore draft</button></div>}

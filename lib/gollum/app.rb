@@ -18,9 +18,11 @@ require 'gollum/projectbook_creation'
 require 'gollum/projectbook_titles'
 require 'gollum/projectbook_save'
 require 'gollum/projectbook_tasks'
+require 'gollum/projectbook_raw_notes'
 require 'gollum/projectbook_mcp'
 require 'gollum/projectbook_settings'
 require 'gollum/projectbook_tree'
+require 'gollum/projectbook_move'
 
 # Requirements for loading the layout view:
 require 'gollum/views/helpers'
@@ -30,6 +32,7 @@ require 'gollum/views/template_cascade'
 require 'gollum/views/layout'
 require 'gollum/views/settings'
 require 'gollum/views/tasks'
+require 'gollum/views/raw_notes'
 require 'gollum/views/missing'
 require 'gollum/views/attachment'
 require 'gollum/views/editable'
@@ -176,6 +179,41 @@ module Precious
     end
 
     namespace '/gollum' do
+      get '/raw-notes' do
+        cache_control :no_store
+        mustache :raw_notes
+      end
+      get '/raw-notes/new' do
+        cache_control :no_store
+        mustache :raw_notes
+      end
+      get '/projectbook/raw-notes' do
+        content_type :json
+        cache_control :no_store
+        {items: Gollum::ProjectbookRawNotes.catalog(Gollum::ProjectbookKnowledge.new(wiki_new)), editable: @allow_editing}.to_json
+      end
+      post '/projectbook/raw-notes/:action' do
+        content_type :json
+        halt 403, {error: 'Use the wiki interface.'}.to_json unless request.env['HTTP_X_PROJECTWIKI_REQUEST'] == '1'
+        halt 403, {error: 'Cross-origin request rejected.'}.to_json if request.env['HTTP_ORIGIN'] && request.env['HTTP_ORIGIN'] != "#{request.scheme}://#{request.host_with_port}"
+        halt 415, {error: 'Expected JSON.'}.to_json unless request.media_type == 'application/json'
+        begin
+          input = JSON.parse(request.body.read(512 * 1024 + 1))
+          service = Gollum::ProjectbookRawNotes
+          result = case params[:action]
+          when 'upload' then service.upload(wiki_new, **input.transform_keys(&:to_sym))
+          when 'create' then service.create(wiki_new, input, commit_options)
+          when 'status' then service.status(wiki_new, **input.transform_keys(&:to_sym), options: commit_options)
+          else halt 404
+          end
+          result.to_json
+        rescue JSON::ParserError, ArgumentError, TypeError, NoMethodError
+          halt 422, {error: 'Invalid raw note request.'}.to_json
+        rescue Gollum::ProjectbookCreation::Error => e
+          halt e.status, {error: e.message}.to_json
+        end
+      end
+
       get '/tasks' do
         cache_control :no_store
         mustache :tasks
@@ -254,6 +292,24 @@ module Precious
         entry = Gollum::ProjectbookKnowledge.new(wiki).entries.find { |e| e[:path] == params['path'] && !e[:path].split('/').any? { |part| part.start_with?('.', '_') } }
         halt 404, {error: 'Document not found.'}.to_json unless entry
         {content: page && page.format == :markdown ? page.text_data : nil, etag: entry[:sha], revision: wiki.commit_for(wiki.ref).id}.to_json
+      end
+
+      post '/projectbook/move/preview' do
+        content_type :json
+        halt 403, {error: 'Use the wiki interface.'}.to_json unless request.env['HTTP_X_PROJECTWIKI_REQUEST'] == '1'
+        halt 403, {error: 'Cross-origin request rejected.'}.to_json if request.env['HTTP_ORIGIN'] && request.env['HTTP_ORIGIN'] != "#{request.scheme}://#{request.host_with_port}"
+        halt 415, {error: 'Expected JSON.'}.to_json unless request.media_type == 'application/json'
+        begin
+          input=JSON.parse(request.body.read(3 * 1024 * 1024))
+          wiki=wiki_new
+          revision=input['revision'] || wiki.commit_for(wiki.ref).id
+          plan=Gollum::ProjectbookMove.prepare(wiki,source:input['source'],target:input['target'],revision:revision,content:input['content'],etag:input['etag'])
+          Gollum::ProjectbookMove.preview(plan).to_json
+        rescue JSON::ParserError
+          halt 422, {error: 'Invalid JSON.'}.to_json
+        rescue Gollum::ProjectbookCreation::Error => e
+          halt e.status, {error: e.message}.to_json
+        end
       end
 
       post '/projectbook/tree' do
@@ -524,7 +580,10 @@ module Precious
         unless filepath.nil?
           commit           = commit_options
           commit[:message] = "Deleted #{filepath}"
-          wiki.delete_file(filepath, commit)
+          committer = Gollum::Committer.new(wiki, commit)
+          Gollum::ProjectbookTree.remove(wiki, committer, filepath)
+          wiki.delete_file(filepath, committer: committer)
+          committer.commit
         end
       end
 

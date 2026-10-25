@@ -90,13 +90,13 @@ class EditorSaveTest < Minitest::Test
   end
   def test_move_and_edits_and_attachments_are_one_commit
     before = head
-    input = payload.merge(source_path: 'Home.md', path: 'Archive/2026/Renamed.md')
+    input = payload.merge(source_path: 'Home.md', path: 'Archive/2026/Renamed.md', move_revision: before)
     response = save(input)
     assert_equal 200, response.status, response.body
     assert_equal before, wiki.commit_for('main').parent.id
     assert_nil wiki.page('Home.md')
     refute File.exist?(File.join(@dir, 'Home.md'))
-    assert_equal input[:content], File.read(File.join(@dir, input[:path]))
+    assert_equal input[:content].sub('](uploads/','](../../uploads/'), File.read(File.join(@dir, input[:path]))
     assert_equal "%PDF-1.4\x00\xff".b, File.binread(File.join(@dir, @target))
     after = head
     assert_equal 409, save(input).status

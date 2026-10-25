@@ -120,7 +120,7 @@ class ProjectbookMCPTest < Minitest::Test
     assert_equal 200, response.status, response.body
     assert_equal 'projectbook', JSON.parse(response.body).dig('result', 'serverInfo', 'name')
     result = JSON.parse(rpc('tools/list').body).fetch('result')
-    assert_equal 17, result.fetch('tools').length
+    assert_equal 22, result.fetch('tools').length
     assert result['tools'].any? { |t| t['name'] == 'save_document' }
     response = rpc('resources/read', {uri: 'projectbook://book/context'})
     result = JSON.parse(response.body)

@@ -141,6 +141,7 @@
 {{#projectbook_tree_enabled}}
 <header class="projectbook-topbar">
   <div class="projectbook-header-main">
+    <a class="btn projectbook-raw-plus" href="{{base_url}}/gollum/raw-notes/new" aria-label="New raw note" title="New raw note: text, photos and voice">＋</a>
     <a class="projectbook-home" href="{{base_url}}/Home">ProjectBook</a>
     <form action="{{search_path}}" method="get" role="search"><input id="projectbook-search" type="search" name="q" aria-label="Search documents" placeholder="Search documents…" title="Filter the tree by title or path. Press Enter to search document contents." autocomplete="off" value="{{query}}"><button class="btn btn-sm projectbook-tool" type="submit" title="Search the contents of documents" data-tooltip="Search the contents of documents" aria-label="Search documents">{{#octicon}}search{{/octicon}}</button></form>
     <nav class="projectbook-header-actions" aria-label="Document actions">
@@ -169,6 +170,7 @@
   <p id="projectbook-tree-notice" role="status" aria-live="polite"></p>
   <nav data-revision="{{projectbook_tree_revision}}" data-editable="{{projectbook_can_create}}" id="projectbook-tree" aria-label="File tree"><ul>{{{projectbook_tree_html}}}</ul></nav>
   <p id="projectbook-empty" hidden>No results</p>
+  <a class="projectbook-overview" href="{{base_url}}/gollum/raw-notes">Raw Notes</a>
   <a class="projectbook-overview" href="{{base_url}}/gollum/overview">All files and attachments ↗</a>
 </aside>
 {{>projectbook_create}}
@@ -185,5 +187,7 @@
 </div>
 <link rel="stylesheet" href="{{base_url}}/projectbook-editor/tasks-view.css">
 <script type="module" id="projectbook-todos-script" data-revision="{{projectbook_todo_revision}}" src="{{base_url}}/projectbook-editor/tasks-view.js"></script>
+<link rel="stylesheet" href="{{base_url}}/projectbook-editor/raw-notes.css">
+<script type="module" src="{{base_url}}/projectbook-editor/raw-notes.js"></script>
 </body>
 </html>

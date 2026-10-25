@@ -66,6 +66,7 @@ module Gollum
       disk_check!(wiki, target, page.text_data)
       committer = Gollum::Committer.new(wiki, options.merge(message: "Delete #{target}"))
       wiki.delete_page(page, committer: committer)
+      ProjectbookTree.remove(wiki,committer,target) if defined?(ProjectbookTree)
       {path: target, commit: committer.commit}
     end
 
@@ -123,6 +124,8 @@ module Gollum
         raise Error.new('Attachments exceed the limit: 20 MB per file, 50 MB per save.', 413) if temp.size > MAX_FILE || total > MAX_TOTAL
         [path, temp]
       end
+      moving = source != target && input['create'] != true
+      move_plan = moving ? ProjectbookMove.prepare(wiki, source: source, target: target, revision: input['move_revision'], content: content, etag: input['etag'], overrides: tasks.to_h { |item| [item[:path],item[:content]] }) : nil
       unchanged = source == target && page && page.text_data == content && prepared.empty? && tasks.empty? && input['create'] != true
       if dry_run
         return {path: target, content: content, previous_content: input['create'] == true ? '' : page.text_data, unchanged: !!unchanged}
@@ -130,7 +133,9 @@ module Gollum
       return {path: target, commit: wiki.commit_for(wiki.ref).id} if unchanged
       committer = Gollum::Committer.new(wiki, options)
       commit = {committer: committer, normalize: false}
-      if input['create'] == true || source != target
+      if move_plan
+        # The shared move plan includes the edited document and incoming links.
+      elsif input['create'] == true || source != target
         wiki.write_file(target, content, commit)
         if input['create'] != true
           wiki.delete_page(page, commit)
@@ -142,7 +147,8 @@ module Gollum
       end
       prepared.each { |path, temp| wiki.write_file(path, ::File.binread(temp.path), commit) }
       ProjectbookTasks.add(wiki, committer, tasks)
-      ProjectbookTree.append(wiki, committer, target) if defined?(ProjectbookTree) && (input['create'] == true || source != target)
+      ProjectbookMove.add(wiki,committer,move_plan) if move_plan
+      ProjectbookTree.append(wiki, committer, target) if defined?(ProjectbookTree) && input['create'] == true
       yield(committer) if block_given?
       {path: target, commit: committer.commit}
     end

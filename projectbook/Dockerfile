@@ -18,7 +18,7 @@ RUN apk add --no-cache build-base \
 FROM gollumwiki/gollum:6.1.0@sha256:05f23e49ba475169ef5d42356428d9762e88c94396fd747b0825bddb628141de
 USER root
 WORKDIR /opt/projectbook-source
-RUN apk add --no-cache poppler-utils
+RUN apk add --no-cache poppler-utils nodejs
 COPY --from=native /usr/local/bundle/ /usr/local/bundle/
 RUN gem install simpleidn:0.3.0 hana:1.3.7 json_schemer:2.5.0 mcp:1.8.1 --ignore-dependencies --no-document
 COPY . .

@@ -113,7 +113,7 @@ class TasksTest < Minitest::Test
     input={'path'=>'Home.md','etag'=>wiki.page('Home.md').sha,'content'=>"# Home\n\n[TODO: Oil](Tasks/#{TASK}.md)\n",'todos'=>[list,task]}
     Gollum::ProjectbookSave.save(wiki,input,[],{message:'Create source'})
     assert_equal 'Home.md',service.read_todo(id:TASK)['source_path']
-    input={'source_path'=>'Home.md','path'=>'Moved.md','etag'=>wiki.page('Home.md').sha,'content'=>wiki.page('Home.md').text_data}
+    input={'source_path'=>'Home.md','path'=>'Moved.md','etag'=>wiki.page('Home.md').sha,'content'=>wiki.page('Home.md').text_data,'move_revision'=>head}
     Gollum::ProjectbookSave.save(wiki,input,[],{message:'Move source'})
     item=Gollum::ProjectbookTasks.catalog(service,sources:true)[:tasks][0]
     assert_equal ['Moved.md'],item['source_references']

@@ -311,3 +311,25 @@ Toolbar tooltips: all top-bar icons now show English action descriptions on hove
 - Browser verification on port 4000: moved the first folder above plan.md, dragged plan.md back through the new top strip, observed Order saved, and reloaded. Plan remained first; the folder stayed in the root. No JavaScript errors.
 - Replaced the stale roadmap with checked completed work and prioritized remaining work. Saved the same bytes to the user-created plan.md through MCP preview/save with expected_version; verified byte equality with application PLAN.md. AGENTS.md now requires keeping both copies reconciled and synchronized.
 - Final rebuilt Docker services healthy. Editor tests: 27 passed. Ruby regression suite: 50 tests, 465 assertions, no failures/errors. Screenshot: projectbook/.runtime/shared-plan.png (local ignored evidence).
+
+## 2026-10-25 — incoming links, folder moves and preserved order (uncommitted)
+
+- Shared server move plan for tree and editor. A pinned book revision protects all scanned documents; stale previews and dirty working copies are rejected. File moves, incoming/outgoing link edits, TODO origin paths and parent order updates share one commit. No push.
+- Markdown AST handles links/images/reference definitions and footnotes; HTML href/src and standard Gollum wiki links are rewritten. Code, frontmatter, comments and external URLs stay unchanged. Folder moves preserve internal .order bytes and binary attachments. Same-folder rename preserves position; document/legacy attachment deletion removes its order entry.
+- Disposable browser fixture: playground/move-links-review/index.md. Dragged source into destination; expanded preview diff showing Markdown/HTML/wiki updates with untouched code example. Cancel produced no commit; Confirm created one commit. Followed the new link and used editor Move to rename the document; incoming links and .order updated together.
+- Regression coverage: folder descendants/collisions/hidden targets/symlinks, stale revision/local draft refusal, unsaved document plus attachments, task identity/origin, nested orders, exact binary bytes, HTTP origin protection and deletion order cleanup. Final tests: 32 JavaScript tests; 60 Ruby tests / 526 assertions, all passing. Docker services healthy on port 4000.
+- Native plan tasks updated through versioned MCP; their UUIDs retained. Completed move tasks are below open work; PLAN.md mirrors requirements/status. Additional confirmation preferences remain a separate discussion. No automatic order reset.
+- Local screenshot evidence: projectbook/.runtime/move-preview.png. Application changes await user review, without commit/push.
+
+## Raw Notes — 2026-10-25
+
+- 65 Ruby tests / 561 assertions pass; 32 JS tests pass. Includes atomic note+media,
+  duplicate retry, chunk retry/mismatch, SHA validation, size/type guards, status
+  conflicts, local work protection, SSRF rejection, read-only/CSRF and MCP file metadata.
+- Local Web UI created text+compressed photo+WAV in one commit; native player
+  reads the one-second fixture correctly. Real MCP created a second photo/audio
+  note; identical retry returned the existing note. No microphone capture of the
+  user's environment was performed by the agent.
+- Real iPhone microphone/camera and ChatGPT file handoff remain user acceptance
+  tests on HTTPS. Automatic transcription/video are not in this version.
+- Book backlog pushed; host auto-push reports success after new local commits.

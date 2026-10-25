@@ -17,6 +17,7 @@ services:
           create_host_path: false
     environment:
       APP_ENV: production
+      PROJECTBOOK_RAW_UPLOADS: /var/lib/projectbook/raw-uploads
       PROJECTBOOK_MIGRATE_TODOS: '${PROJECTBOOK_MIGRATE_TODOS:-false}'
       GOLLUM_REF: '${GOLLUM_REF:-main}'
       GOLLUM_READ_ONLY: '${GOLLUM_READ_ONLY:-false}'

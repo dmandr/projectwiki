@@ -358,9 +358,8 @@ To undo the migration, revert its book commit with the server stopped, then rest
 # Tree editing
 
 Drag an item to the upper/lower edge of a sibling row to reorder it. Drag a
-document or attachment to the middle of a folder row to move it; drop on
-**Explorer** to move it to the book root. Folder rows themselves can be reordered,
-but moving whole folders is not supported yet. Clear search before dragging.
+document, attachment or whole folder to the middle of a folder row to move it;
+drop on **Explorer** to move it to the book root. Clear search before dragging.
 Tree mutations are disabled while the document editor is open.
 The strip above the first root row becomes visible during dragging: drop a root
 item there to place it first. Folder row edges reorder, while the middle third
@@ -381,8 +380,25 @@ ones; UI/MCP creation appends children to an existing order in the same commit.
 
 Tree writes use the shared write lock and require the displayed Git revision and
 a clean book working tree. Each operation creates one local commit (no push).
-Moving Markdown adjusts its relative Markdown/HTML links using the same parser
-as the editor's Move action. Incoming links from other documents are not rewritten.
+Tree and editor moves use the same server-side plan. The preview lists moved files,
+incoming-link changes and order/metadata updates, with expandable Markdown diffs.
+The book revision must still match at Save; otherwise refresh the preview. When
+tree move confirmation is disabled, the same validation runs without a dialog.
+Moves update local Markdown links/images/reference definitions, HTML href/src,
+and standard Gollum `[[label|path]]` links, preserving query strings and anchors.
+Code, comments, frontmatter and external URLs stay untouched. Extensionless page
+links resolve against tracked paths. Reverse/global wiki-link modes and custom
+macro syntax are not handled. The Markdown corpus is limited to 64 MiB per scan;
+each document retains the existing 2 MiB limit. Failures abort the move.
+The parser is bundled from the pinned editor dependencies and runs in Node inside
+the image. For a non-Docker runtime build the editor and set
+`PROJECTBOOK_LINK_REWRITER` to the absolute `dist/book-links.cjs` path.
+Internal `.order` files travel with a folder byte-for-byte. Parent orders remove
+the old entry and append to the destination when it has a manual order. Renaming
+within the same folder preserves the item's position. Deleting a document removes
+its order entry in the deletion commit. No move resets manual ordering.
+TODO source paths are updated; task IDs stay unchanged. Agent-memory source SHAs
+remain historical evidence and can become stale after a move.
 Moving attachments preserves their bytes. Empty source folders are retained with
 `.gitkeep`. Canceling a confirmation and dropping in the same position write nothing.
 # Callouts and footnotes
@@ -404,3 +420,65 @@ definition. Definitions are editable at the end of the document in Visual mode;
 the normal reader numbers the references and provides links back to the text.
 Definition blocks remain after a reference is removed, so deleting a reference
 does not silently discard the note. Markdown mode exposes the standard syntax.
+
+### Raw Notes (first version)
+
+Use the **＋** toolbar action or `/gollum/raw-notes/new`. Capture optional title,
+text, photos and voice; save into `raw-notes/YYYY-MM-DD-UUID/note.md` with media
+and hidden `.note.json`. One local Git commit contains the complete note.
+Unsorted/Processed is metadata, not a directory move. The ordinary editor can
+edit the saved Markdown. Inbox: `/gollum/raw-notes`.
+
+Photos default to JPEG, maximum long edge 2048 px, quality .85; choose original
+quality before attaching for diagrams/labels. Unsupported image decoding keeps
+the original with a notice. Original HEIC rendering depends on the browser.
+Audio uses MediaRecorder MIME negotiation. Microphone requires HTTPS or localhost;
+recording must finish while the page is open. IndexedDB keeps the text and finished
+media on the device. Recording in progress is not guaranteed to survive closing
+Safari. Video, transcription, and background/offline send queues are deferred.
+
+Limits: 20 attachments, 20 MiB per file, 50 MiB per note, 100000 text characters.
+Uploads use retryable 256 KiB chunks; staging is outside Git in the app-settings
+volume, expires after 24h (lazy cleanup), capped at 250 MiB per book. SHA256 checks
+all files. Reusing the same note UUID and payload returns the existing note.
+Metadata edits use expected_version, document edits use the document blob SHA.
+
+MCP: `upload_raw_note_attachment`, `create_raw_note`, `list_raw_notes`,
+`read_raw_note`, `set_raw_note_status`. `create_raw_note.files` advertises
+`openai/fileParams` for ChatGPT file objects; public HTTPS downloads are bounded
+and private addresses/redirects rejected. Other clients can upload byte chunks.
+No implicit access to chat attachments: the client must supply file objects or
+bytes. No real ChatGPT file-picker integration or real iPhone test is claimed by
+local protocol tests.
+
+### Container-only cloud deployment and automatic book push
+
+`deploy/build-image.sh linux/amd64` builds a tagged, reviewed committed checkout;
+use `linux/arm64` for Mac ARM. The upstream pinned base supports both platforms.
+`deploy/send-image.sh SSH_HOST IMAGE` streams the **image**, not source files,
+into remote Docker. No registry login is required. Optionally tag/push that image
+to your own registry. Images exclude the book, settings and credentials.
+
+`deploy/install-cloud.sh SSH_HOST IMAGE BOOK_SSH_URL` installs Compose/proxy and
+an independent book clone under `/opt/projectbook`. It requires Git SSH access
+already configured on the host. Proxy listens only on `127.0.0.1:8092`; point a
+Cloudflare Tunnel hostname there and protect Web UI with Cloudflare Access.
+Configure `PROJECTBOOK_PUBLIC_URL=https://YOUR_HOST` in the remote `.env` and
+recreate wiki after assigning the hostname. MCP additionally requires the generated
+`PROJECTBOOK_MCP_TOKEN` (remote `.env`, mode0600). A ChatGPT client also needs a
+compatible Access policy; this deployment does not implement OAuth.
+
+`deploy/install-mac-push.sh` installs a user LaunchAgent that checks book HEAD
+every two seconds and pushes committed changes, retrying failures. On cloud the
+installer enables `projectbook-book-push.service`. No worktree modifications,
+pull, merge or force push occur. Status: local `.runtime/book-push.json`, remote
+`/opt/projectbook/book-push.json`. Divergent writers stop pushing until reconciled;
+full automatic pull/conflict handling remains in the plan. Never assume both
+copies are current without checking their Git revisions.
+
+Stop: `docker compose stop` in `/opt/projectbook`; stop push with
+`systemctl stop projectbook-book-push`. Roll back by setting an earlier image tag
+in `.env` and running `docker compose up -d`; book and settings persist. Remove
+containers with `docker compose down` (without `-v`). On Mac disable auto-push:
+`launchctl bootout gui/$(id -u)/net.projectbook.book-push` and remove its LaunchAgent
+plist. Deleting containers does not delete the book.

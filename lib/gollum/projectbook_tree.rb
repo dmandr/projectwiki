@@ -42,6 +42,12 @@ module Gollum
       committer.add(full, JSON.pretty_generate(names.uniq) + "\n")
       committer.after_commit { |index, _| index.update_working_dir(full) }
     end
+    def self.remove(wiki, committer, path)
+      folder=parent(path)
+      return unless wiki.file(order_path(folder))
+      snapshot=ProjectbookKnowledge.new(wiki)
+      write_order(wiki,committer,folder,ordered(wiki,snapshot,folder)-[::File.basename(path)])
+    end
     # Existing manual orders absorb new children at the end, in the same commit.
     # No .order is created by normal document creation.
     def self.append(wiki, committer, path)
@@ -57,27 +63,6 @@ module Gollum
         next if name.start_with?('.') || names.include?(name)
         write_order(wiki, committer, folder, names + [name])
       end
-    end
-    def self.move_file(wiki, snapshot, input, source, target, folder, options)
-      entry = snapshot.entries.find { |e| e[:path] == source }
-      raise Error.new('File no longer exists.', 404) unless entry
-      raise Error.new('File changed. Reload and try again.', 412) unless input['etag'] == entry[:sha]
-      ProjectbookSave.destination!(wiki, target, markdown: false)
-      # Binary bytes are read locally, never sent through a JSON text response.
-      content = wiki.file(source).raw_data
-      ProjectbookSave.disk_check!(wiki, source, content)
-      committer = Gollum::Committer.new(wiki, options.merge(message: "Move #{source} to #{target}"))
-      append(wiki, committer, target)
-      old_parent = parent(source)
-      if snapshot.entries.any? { |e| e[:path] == order_path(old_parent) }
-        write_order(wiki, committer, old_parent, ordered(wiki, snapshot, old_parent) - [::File.basename(source)])
-      end
-      wiki.write_file(target, content, committer: committer, normalize: false)
-      wiki.delete_file(source, committer: committer)
-      if !old_parent.empty? && children(snapshot, old_parent) == [::File.basename(source)] && !wiki.file(old_parent + '/.gitkeep')
-        wiki.write_file(old_parent + '/.gitkeep', '', committer: committer, normalize: false)
-      end
-      {revision: committer.commit, path: target}
     end
     def self.apply(wiki, input, options)
       raise Error.new('Editing is disabled.', 403) unless wiki.allow_editing
@@ -106,20 +91,8 @@ module Gollum
         {revision: committer.commit, order: result}
       elsif input['action'] == 'move'
         target = [folder, ::File.basename(source)].reject(&:empty?).join('/')
-        raise Error, 'Choose a different folder.' if target == source
-        page = wiki.page(source)
-        return move_file(wiki, snapshot, input, source, target, folder, options) unless page && page.url_path == source && page.format == :markdown
-        result = ProjectbookSave.save(wiki, {'source_path'=>source, 'path'=>target, 'content'=>input['content'], 'etag'=>input['etag']}, [], options.merge(message: "Move #{source} to #{target}")) do |committer|
-          old_parent = parent(source)
-          if snapshot.entries.any? { |e| e[:path] == order_path(old_parent) }
-            write_order(wiki, committer, old_parent, ordered(wiki, snapshot, old_parent) - [::File.basename(source)])
-          end
-          # Retain an empty source directory so it remains a drop target.
-          if !old_parent.empty? && children(snapshot, old_parent) == [::File.basename(source)]
-            wiki.write_file(old_parent + '/.gitkeep', '', committer: committer, normalize: false) unless wiki.file(old_parent + '/.gitkeep')
-          end
-        end
-        {revision: result[:commit], path: target}
+        plan = ProjectbookMove.prepare(wiki, source: source, target: target, revision: input['revision'], etag: input['etag'])
+        ProjectbookMove.apply(wiki, plan, options)
       else
         raise Error, 'Choose move or reorder.'
       end
