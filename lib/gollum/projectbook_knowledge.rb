@@ -315,22 +315,33 @@ module Gollum
         {name: 'ProjectBook agent', email: 'agent@projectbook.local', message: 'Update TODOs via MCP'}, dry_run: dry_run)
     end
 
-    def save_document(path:, content:, expected_version:, dry_run: true, message: 'Update document via MCP')
+    def save_document(path:, content:, expected_version:, dry_run: true, message: 'Update document via MCP', attachments: [])
       document_write_allowed!
       document_path!(path)
       raise Error, 'expected_version must be the document sha, or empty for creation.' unless expected_version.match?(/\A(?:[0-9a-f]{40})?\z/)
       raise Error, 'Commit message must be 1..200 characters.' unless (1..200).cover?(message.strip.length)
       input = {'path' => path, 'content' => content, 'etag' => expected_version, 'create' => expected_version.empty?}
       options = {name: 'ProjectBook agent', email: 'agent@projectbook.local', message: message.strip}
+      temps=[];uploads=[]
       begin
-        prepared = ProjectbookSave.save(@wiki, input, [], options, dry_run: true)
+        raise Error,'Maximum 30 attachments.' unless attachments.is_a?(Array) && attachments.length<=30
+        input['attachments']=attachments.map do |raw|
+          item=raw.transform_keys(&:to_s);id=ProjectbookRawNotes.id!(item['upload_id']);name=item['name']
+          ProjectbookCreation.segment!(name)
+          bytes=::File.binread(::File.join(ProjectbookRawNotes.stage(@wiki),id),ProjectbookSave::MAX_FILE+1)
+          raise Error,'Attachment checksum mismatch.' unless Digest::SHA256.hexdigest(bytes)==item['sha256']
+          temp=Tempfile.new('projectbook-mcp-asset');temps<<temp;temp.binmode;temp.write(bytes);temp.flush;uploads<<{tempfile:temp}
+          {'path'=>'uploads/'+id+'/'+name}
+        end
+        prepared = ProjectbookSave.save(@wiki, input, uploads, options, dry_run: true)
         preview = document_diff(prepared[:previous_content], prepared[:content], path)
         result = {path: path, url: url(path), dry_run: dry_run, created: expected_version.empty?, unchanged: prepared[:unchanged],
           expected_version: expected_version, version: Digest::SHA1.hexdigest("blob #{prepared[:content].bytesize}\0" + prepared[:content]), revision: @head}.merge(preview)
         unless dry_run
-          saved = ProjectbookSave.save(@wiki, input, [], options)
+          saved = ProjectbookSave.save(@wiki, input, uploads, options)
           result[:commit] = saved[:commit]
           result[:revision] = saved[:commit]
+          result[:version] = Gollum::Wiki.new(@wiki.path,ref:@wiki.ref).page(path).sha
         end
         result
       rescue Error => e
@@ -338,6 +349,8 @@ module Gollum
         raise
       rescue Gollum::DuplicatePageError, Gollum::IllegalDirectoryPath
         raise document_conflict(path, expected_version, Error.new('The destination changed or already exists.', 409))
+      ensure
+        temps.each(&:close!)
       end
     end
 

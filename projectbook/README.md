@@ -503,3 +503,28 @@ endpoint uses a static Bearer token behind Cloudflare Access. An Access browser
 login does not authenticate ChatGPT server-to-server requests. Authenticated
 ChatGPT plugins require a compatible OAuth flow; do not remove Access or expose
 write tools anonymously to work around this. See https://developers.openai.com/plugins/build/auth.
+
+### Shared attachments
+
+Images and files uploaded in the editor are stored in Git under the hidden root
+folder `.asset/<UUID>/<filename>`. Uploads stay in the browser draft until Save;
+the page and its new attachments are committed together.
+
+Markdown links use paths relative to the repository root:
+
+```markdown
+![Oil filter](/.asset/12345678-1234-1234-1234-123456789012/filter.jpg)
+[Inspection report](/.asset/12345678-1234-1234-1234-123456789012/report.pdf)
+```
+
+These links work in ProjectBook and GitHub's rendered repository Markdown,
+including README files. Some standalone Markdown viewers need their root folder
+configured. The `.asset` directory is hidden from the book's navigation and search,
+but its files remain accessible through page links and MCP.
+
+Copying text or a page reuses the same attachment links without duplicating files.
+Moving or renaming a page does not move shared attachments. A new upload gets a
+new UUID, so replacing an image does not overwrite images used by other pages.
+Deleting a page leaves shared attachments intact. Existing `assets/`, `uploads/`
+and Raw Notes media are unchanged; migration and unused-file cleanup are separate
+operations. See [Shared Git assets](SHARED-ASSETS.md) for implementation details.

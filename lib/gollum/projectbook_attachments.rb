@@ -11,7 +11,7 @@ module Gollum
 
     def attachment!(path)
       path!(path)
-      entry = entries.find { |e| e[:path] == path && visible?(e) && !markdown?(e) }
+      entry = entries.find { |e| e[:path] == path && (visible?(e) || ProjectbookLocalAssets.readable?(self,path)) && !markdown?(e) }
       raise Error.new('Attachment not found.', 404) unless entry
       raise Error, 'Attachment exceeds the 100 MiB limit.' if entry[:bytes] > MAX_ATTACHMENT
       entry

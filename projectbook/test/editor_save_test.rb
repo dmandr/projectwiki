@@ -37,8 +37,9 @@ class EditorSaveTest < Minitest::Test
     response = save(input)
     assert_equal 200, response.status, response.body
     assert_equal before, wiki.commit_for('main').parent.id
-    assert_equal input[:content], File.read(File.join(@dir, 'Home.md'))
-    assert_equal "%PDF-1.4\x00\xff".b, File.binread(File.join(@dir, @target))
+    asset=@target.sub('uploads/','.asset/')
+    assert_equal input[:content].sub(@target,'/'+asset), File.read(File.join(@dir, 'Home.md'))
+    assert_equal "%PDF-1.4\x00\xff".b, File.binread(File.join(@dir, asset))
     after = head
     assert_equal 412, save(input).status
     assert_equal after, head
@@ -96,8 +97,9 @@ class EditorSaveTest < Minitest::Test
     assert_equal before, wiki.commit_for('main').parent.id
     assert_nil wiki.page('Home.md')
     refute File.exist?(File.join(@dir, 'Home.md'))
-    assert_equal input[:content].sub('](uploads/','](../../uploads/'), File.read(File.join(@dir, input[:path]))
-    assert_equal "%PDF-1.4\x00\xff".b, File.binread(File.join(@dir, @target))
+    asset=@target.sub('uploads/','.asset/')
+    assert_equal input[:content].sub(@target,'/'+asset), File.read(File.join(@dir, input[:path]))
+    assert_equal "%PDF-1.4\x00\xff".b, File.binread(File.join(@dir, asset))
     after = head
     assert_equal 409, save(input).status
     assert_equal after, head

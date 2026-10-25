@@ -1,3 +1,4 @@
+import TurndownService from 'turndown';
 import React, { useState, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MDXEditor, realmPlugin, addExportVisitor$, rootEditor$, viewMode$,
@@ -210,6 +211,30 @@ if (document.getElementById('projectbook-editor-app')) {
         pending.current = before; setFiles([...before]); setStatus(error.message); stashSoon();
       }
     }
+    async function pasteAssets(text) {
+      const before=[...pending.current];
+      try {
+        const response=await fetch(base+'/gollum/projectbook/assets/paste',{method:'POST',headers:{'Content-Type':'application/json','X-ProjectWiki-Request':'1'},body:JSON.stringify({path,content:text})});
+        const result=await response.json();if(!response.ok)throw new Error(result.error || 'Could not copy attachments.');
+        setFiles([...pending.current]);insert(result.content);stashSoon();
+        setStatus('Pasted links reuse the book’s shared attachments.');
+      } catch(error){pending.current.filter(f=>!before.includes(f)).forEach(f=>URL.revokeObjectURL(f.url));pending.current=before;setFiles([...before]);setStatus(error.message);}
+    }
+    function paste(event){
+      if(event.clipboardData.files.length){event.preventDefault();event.stopPropagation();attach(event.clipboardData.files);return;}
+      const plain=event.clipboardData.getData('text/plain');const html=event.clipboardData.getData('text/html');
+      if(!plain.includes('.asset/') && !html.includes('.asset/'))return;
+      event.preventDefault();event.stopPropagation();
+      let text=plain;
+      if(bridge.mode!=='source' && html){
+        const doc=new DOMParser().parseFromString(html,'text/html');
+        doc.querySelectorAll('[src],[href]').forEach(el=>{for(const attr of ['src','href']){const value=el.getAttribute(attr);if(!value)continue;try{const url=new URL(value,location.href);if(url.origin===location.origin)el.setAttribute(attr,url.pathname+url.search+url.hash);}catch{}}});
+        const converter=new TurndownService();
+        converter.addRule('sized-image',{filter:node=>node.nodeName==='IMG' && (node.hasAttribute('width') || node.style.width),replacement:(_,node)=>{const width=node.getAttribute('width') || node.style.width;const safe=/^\d+(?:\.\d+)?(?:%|px)?$/.test(width)?width:'';const escape=v=>v.replace(/&/g,'&amp;').replace(/"/g,'&quot;');return safe?'<img src="'+escape(node.getAttribute('src')||'')+'" alt="'+escape(node.getAttribute('alt')||'')+'" width="'+safe+'" />':'!['+(node.getAttribute('alt')||'')+']('+node.getAttribute('src')+')';}});
+        text=converter.turndown(doc.body);
+      }
+      void pasteAssets(text);
+    }
     const download = () => {
       const url = URL.createObjectURL(new Blob([current.current], {type: 'text/markdown;charset=utf-8'}));
       const a = document.createElement('a'); a.href = url; a.download = name.current; a.click();
@@ -225,6 +250,18 @@ if (document.getElementById('projectbook-editor-app')) {
         if (discard) localStorage.removeItem('projectbook:mdx:draft:' + location.pathname);
         allowLeave.current = true; location.assign(closeUrl);
       } catch (_) { setStatus('Could not store or discard the browser draft. Keep this tab open until Save succeeds.'); }
+    }
+    async function copyDocument(){
+      const target=window.prompt('Copy the saved page with shared attachment links to:',path.replace(/\.md$/i,'-copy.md'));
+      if(!target || target===path)return;
+      try{
+        const info=await fetch(base+'/gollum/projectbook/tree/document?path='+encodeURIComponent(path)).then(r=>r.json());
+        const input={source:path,target,revision:info.revision,dry_run:true};
+        const send=async body=>{const r=await fetch(base+'/gollum/projectbook/assets/copy',{method:'POST',headers:{'Content-Type':'application/json','X-ProjectWiki-Request':'1'},body:JSON.stringify(body)});const result=await r.json();if(!r.ok)throw new Error(result.error || 'Copy failed.');return result;};
+        const preview=await send(input);
+        if(!window.confirm('Copy saved page with shared attachment links to '+target+'? Unsaved edits stay in this draft.'))return;
+        await send({...input,dry_run:false});setStatus('Saved page copied to '+target+'. Your current draft is unchanged.');window.dispatchEvent(new Event('projectbook:changed'));
+      }catch(error){setStatus(error.message);}
     }
     async function deleteDocument() {
       if(working.current || isNew)return;
@@ -334,6 +371,7 @@ if (document.getElementById('projectbook-editor-app')) {
         <button type="button" className="btn btn-sm" title="Move" aria-label="Move" disabled={busy} onClick={openMove}>
           <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M3 7h7l2 2h9v11H3ZM3 7V4h7l2 3M8 14h9m-3-3 3 3-3 3"/></svg>
         </button>
+        {!isNew && !folderPage && <button type="button" className="btn btn-sm" title="Copy saved document" aria-label="Copy document" disabled={busy} onClick={copyDocument}><svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6"><rect x="8" y="8" width="12" height="13" rx="2"/><path d="M16 8V3H3v13h5"/></svg></button>}
         {!isNew && <button type="button" className="btn btn-sm" title="Delete document" aria-label="Delete document" disabled={busy} onClick={openDelete}>
           <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7"/></svg>
         </button>}
@@ -341,7 +379,7 @@ if (document.getElementById('projectbook-editor-app')) {
       {deleteOpen && <dialog ref={deleteDialog} className="pb-move-dialog" aria-labelledby="pb-delete-title" onCancel={event=>{if(busy)event.preventDefault();else setDeleteOpen(false);}}>
         <h2 id="pb-delete-title">{folderPage ? 'Delete entire folder?' : 'Delete document?'}</h2>
         <p><strong>{displayTitle} — /{folderPage ? folderPath : path}</strong></p>
-        {folderPage ? <p>Delete this folder and ALL subfolders, pages and attachments inside it. {deletePreview ? `${deletePreview.files} files (${deletePreview.documents} Markdown documents) will be removed.` : 'Loading deletion preview…'} Git history is kept. This confirmation cannot be disabled.</p> : <p>The page will be removed from the book. Its saved versions remain in Git history. Attachments and separate TODO files are kept.</p>}
+        {folderPage ? <p>Delete this folder and ALL subfolders, pages and attachments inside it. {deletePreview ? `${deletePreview.files} files (${deletePreview.documents} Markdown documents) will be removed.` : 'Loading deletion preview…'} Git history is kept. This confirmation cannot be disabled.</p> : <p>The page will be removed from the book. Its saved versions remain in Git history. Shared attachments and separate TODO files are kept.</p>}
         {(dirty() || draft) && <p>Unsaved edits in this editor will be discarded.</p>}
         <div role="status" className="pb-editor-status">{status}</div>
         <div className="pb-editor-actions">
@@ -395,7 +433,7 @@ if (document.getElementById('projectbook-editor-app')) {
         onKeyDown={event => {if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') save(event);}}
         onDragOverCapture={event => {if (event.dataTransfer.types.includes('Files')) {event.preventDefault(); event.stopPropagation(); event.dataTransfer.dropEffect = 'copy';}}}
         onDropCapture={event => {if (event.dataTransfer.files.length) {event.preventDefault(); event.stopPropagation(); attach(event.dataTransfer.files, event);}}}
-        onPasteCapture={event => {if (event.clipboardData.files.length) {event.preventDefault(); event.stopPropagation(); attach(event.clipboardData.files);}}}>
+        onPasteCapture={paste}>
         <MDXEditor ref={ref} markdown={initial} trim={false} readOnly={busy} contentEditableClassName="pb-prose"
           translation={(key, fallback) => translations[fallback] || fallback || key}
           onChange={change} onError={() => {setStatus('Visual mode cannot parse this content. Use Markdown; source text is preserved.'); queueMicrotask(() => bridge.realm?.pub(viewMode$, 'source'));}}

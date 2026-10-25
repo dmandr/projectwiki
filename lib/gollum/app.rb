@@ -17,6 +17,7 @@ require 'gollum/navigation_index'
 require 'gollum/projectbook_creation'
 require 'gollum/projectbook_titles'
 require 'gollum/projectbook_folders'
+require 'gollum/projectbook_local_assets'
 require 'gollum/projectbook_save'
 require 'gollum/projectbook_tasks'
 require 'gollum/projectbook_raw_notes'
@@ -311,6 +312,36 @@ module Precious
         end
       end
 
+      post '/projectbook/assets/copy' do
+        content_type :json
+        halt 403 unless request.env['HTTP_X_PROJECTWIKI_REQUEST']=='1'
+        halt 403 if request.env['HTTP_ORIGIN'] && request.env['HTTP_ORIGIN'] != "#{request.scheme}://#{request.host_with_port}"
+        begin
+          input=JSON.parse(request.body.read(100_001))
+          args={revision:input['revision'],dry_run:input.fetch('dry_run',true),options:commit_options}
+          result=Gollum::ProjectbookLocalAssets.copy(wiki_new,**args,source:input['source'],target:input['target'])
+          result.to_json
+        rescue JSON::ParserError
+          halt 422,{error:'Invalid JSON.'}.to_json
+        rescue Gollum::ProjectbookCreation::Error=>e
+          halt e.status,{error:e.message}.to_json
+        end
+      end
+
+      post '/projectbook/assets/paste' do
+        content_type :json
+        halt 403 unless request.env['HTTP_X_PROJECTWIKI_REQUEST']=='1'
+        halt 413 if request.content_length.to_i>3*1024*1024
+        begin
+          input=JSON.parse(request.body.read)
+          Gollum::ProjectbookLocalAssets.paste(wiki_new,input['content'],input['path']).to_json
+        rescue JSON::ParserError
+          halt 422,{error:'Invalid clipboard data.'}.to_json
+        rescue Gollum::ProjectbookCreation::Error=>e
+          halt e.status,{error:e.message}.to_json
+        end
+      end
+
       post '/projectbook/save' do
         content_type :json
         halt 403, {error: 'This request must come from the wiki interface.'}.to_json unless request.env['HTTP_X_PROJECTWIKI_REQUEST'] == '1'
@@ -407,6 +438,9 @@ module Precious
         halt 400 if fullpath.split('/').include?('..')
         forbid if Gollum::Page.protected_files.include?(::File.basename(fullpath))
         wiki = wiki_new
+        if fullpath.split('/').any? { |p| p.start_with?('.') }
+          halt 404 unless Gollum::ProjectbookLocalAssets.readable?(Gollum::ProjectbookKnowledge.new(wiki),fullpath)
+        end
         @file = wiki.file(fullpath, wiki.ref, true)
         halt 404 unless @file
         mustache :attachment
@@ -810,7 +844,7 @@ module Precious
           @max_count = 10
           wiki       = wiki_new
           @results, @search_terms = wiki.search(@query)
-          @results.reject! { |result| result[:name].to_s.split('/').include?('.projectbook') }
+          @results.reject! { |result| (result[:name].to_s.split('/') & %w[.projectbook .asset]).any? }
         end
         mustache :search
       end
@@ -953,6 +987,14 @@ module Precious
 
     def show_file(file)
       return unless file
+      if file.path.split('/').any? { |p| p.start_with?('.') }
+        snapshot=Gollum::ProjectbookKnowledge.new(wiki_new)
+        halt 404 unless Gollum::ProjectbookLocalAssets.readable?(snapshot,file.path)
+        headers 'X-Content-Type-Options'=>'nosniff', 'Content-Security-Policy'=>"sandbox; default-src 'none'"
+        content_type snapshot.attachment_mime(path:file.path)
+        headers 'Content-Disposition'=>'attachment' unless file.path.match?(/\.(png|jpe?g|gif|webp|pdf)\z/i)
+        return file.raw_data
+      end
       content_type file.mime_type
       if file.on_disk?
         send_file file.on_disk_path, :disposition => 'inline'

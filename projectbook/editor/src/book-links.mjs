@@ -16,9 +16,13 @@ const escape = value => value.replace(/&/g,'&amp;').replace(/"/g,'&quot;').repla
 export function movedPath(path, source, target) {
   return path===source ? target : path.startsWith(source+'/') ? target+path.slice(source.length) : path;
 }
-export function rewriteBookLinks(text, from, to, source, target, paths) {
+export function rewriteBookLinks(text, from, to, source, target, paths, mapping = {}, assetFallback = false) {
   const known = new Set(paths);
-  const resolve = path => known.has(path) ? path : [path+'.md',path+'.markdown'].find(p=>known.has(p)) || path;
+  const resolve = path => {
+    if(known.has(path))return path;
+    if(assetFallback && path.includes('.asset/')) { const suffix=path.slice(path.indexOf('.asset/'));const matches=paths.filter(p=>p===suffix || p.endsWith('/'+suffix));if(matches.length===1)return matches[0]; }
+    return [path+'.md',path+'.markdown'].find(p=>known.has(p)) || path;
+  };
   function url(value, wiki=false) {
     if (!value || /^(?:[a-z][a-z\d+.-]*:|\/\/|#|\?)/i.test(value)) return value;
     let parsed; try { parsed=new URL(value,'https://book.invalid/'+encode(from)); } catch { return value; }
@@ -29,7 +33,8 @@ export function rewriteBookLinks(text, from, to, source, target, paths) {
       if(path.startsWith(prefix)){route=prefix;path=path.slice(prefix.length);break;}
     }
     const trailing=path.endsWith('/'); path=path.replace(/\/$/,'');
-    const resolved=resolve(path), mapped=movedPath(resolved,source,target);
+    const resolved=resolve(path), mapped=mapping[resolved] ?? (source ? movedPath(resolved,source,target) : resolved);
+    if(assetFallback && mapped.startsWith('.asset/')) return '/'+encode(mapped)+parsed.search+parsed.hash;
     if(mapped===resolved && from===to) return value;
     if(value.startsWith('/') && mapped===resolved) return value;
     // A moved wiki link is made explicit to avoid title/basename ambiguity.

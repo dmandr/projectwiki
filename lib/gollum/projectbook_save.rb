@@ -125,6 +125,7 @@ module Gollum
         raise Error.new('Attachments exceed the limit: 20 MB per file, 50 MB per save.', 413) if temp.size > MAX_FILE || total > MAX_TOTAL
         [path, temp]
       end
+      content, prepared = ProjectbookLocalAssets.prepare_uploads(wiki, source, target, content, prepared, link_source: input['create'] == true ? target : source)
       moving = source != target && input['create'] != true
       move_plan = moving ? ProjectbookMove.prepare(wiki, source: source, target: target, revision: input['move_revision'], content: content, etag: input['etag'], overrides: tasks.to_h { |item| [item[:path],item[:content]] }) : nil
       unchanged = source == target && page && page.text_data == content && prepared.empty? && tasks.empty? && input['create'] != true

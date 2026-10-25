@@ -27,7 +27,8 @@
     "micromark-extension-frontmatter": "2.0.0",
     "micromark-extension-gfm-footnote": "2.1.0",
     "react": "19.3.1",
-    "react-dom": "19.3.1"
+    "react-dom": "19.3.1",
+    "turndown": "^7.2.2"
   },
   "private": true
 }
