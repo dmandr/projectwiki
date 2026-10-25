@@ -133,8 +133,8 @@
   <title>{{#projectbook_history_screen}}History{{/projectbook_history_screen}}{{^projectbook_history_screen}}{{title}}{{/projectbook_history_screen}}</title>
   {{#projectbook_tree_enabled}}{{>projectbook_style}}{{/projectbook_tree_enabled}}
   {{#has_editor}}{{#projectbook_mdx_editor}}
-  <link rel="stylesheet" href="{{base_url}}/projectbook-editor/editor.css">
-  <script type="module" src="{{base_url}}/projectbook-editor/editor.js"></script>
+  <link rel="stylesheet" href="{{base_url}}/projectbook-editor/editor.css?v={{projectbook_ui_version}}">
+  <script type="module" src="{{base_url}}/projectbook-editor/editor.js?v={{projectbook_ui_version}}"></script>
   {{/projectbook_mdx_editor}}{{/has_editor}}
 </head>
 <body class="{{#projectbook_tree_enabled}}projectbook-tree-layout{{/projectbook_tree_enabled}}">
@@ -175,7 +175,7 @@
 </aside>
 {{>projectbook_create}}
 {{>projectbook_script}}
-<script type="module" src="{{base_url}}/projectbook-editor/tree.js"></script>
+<script type="module" src="{{base_url}}/projectbook-editor/tree.js?v={{projectbook_ui_version}}"></script>
 {{/projectbook_tree_enabled}}
 <div class="container-lg clearfix projectbook-content">
 {{{yield}}}
@@ -185,10 +185,10 @@
 </form>
 {{/projectbook_rename}}
 </div>
-<link rel="stylesheet" href="{{base_url}}/projectbook-editor/tasks-view.css">
-<script type="module" id="projectbook-todos-script" data-revision="{{projectbook_todo_revision}}" src="{{base_url}}/projectbook-editor/tasks-view.js"></script>
-<link rel="stylesheet" href="{{base_url}}/projectbook-editor/raw-notes.css">
-<script type="module" src="{{base_url}}/projectbook-editor/raw-notes.js"></script>
+<link rel="stylesheet" href="{{base_url}}/projectbook-editor/tasks-view.css?v={{projectbook_ui_version}}">
+<script type="module" id="projectbook-todos-script" data-revision="{{projectbook_todo_revision}}" src="{{base_url}}/projectbook-editor/tasks-view.js?v={{projectbook_ui_version}}"></script>
+<link rel="stylesheet" href="{{base_url}}/projectbook-editor/raw-notes.css?v={{projectbook_ui_version}}">
+<script type="module" src="{{base_url}}/projectbook-editor/raw-notes.js?v={{projectbook_ui_version}}"></script>
 <script>
 document.querySelector('[data-folder-page-create]')?.addEventListener('click',async function(){
   this.disabled=true;

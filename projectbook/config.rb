@@ -14,7 +14,18 @@ if ENV.fetch('GOLLUM_TREE', 'true') == 'true'
   Precious::Views::Layout.include(ProjectBookDocumentTree)
 end
 
+require 'digest'
+# Change entry-point URLs whenever the compiled UI changes (including imported chunks).
+projectbook_dist = File.join(__dir__, 'editor', 'dist', 'projectbook-editor')
+PROJECTBOOK_UI_VERSION = Digest::SHA256.hexdigest(
+  Dir[File.join(projectbook_dist, '*')].select { |path| File.file?(path) }.sort.map { |path| File.binread(path) }.join
+)[0, 16]
+
 module ProjectBookEditorView
+  def projectbook_ui_version
+    PROJECTBOOK_UI_VERSION
+  end
+
   def projectbook_mdx_editor
     ENV.fetch('GOLLUM_EDITOR', 'mdx') == 'mdx' && (!respond_to?(:format) || format == 'markdown')
   end
@@ -31,7 +42,8 @@ end
 Precious::Views::Layout.include(ProjectBookEditorView)
 if ENV.fetch('GOLLUM_EDITOR', 'mdx') == 'mdx' || ENV.fetch('GOLLUM_TREE', 'true') == 'true'
   require 'rack/static'
-  Precious::App.use Rack::Static, urls: ['/projectbook-editor'], root: '/experiment/editor/dist'
+  Precious::App.use Rack::Static, urls: ['/projectbook-editor'], root: '/experiment/editor/dist',
+    header_rules: [[:all, {'Cache-Control' => 'no-cache, must-revalidate'}]]
 end
 if ENV.fetch('GOLLUM_TREE', 'true') == 'true' || ENV.fetch('GOLLUM_EDITOR', 'mdx') == 'mdx'
   Precious::App.wiki_options[:template_dir] = File.join(__dir__, 'templates')
