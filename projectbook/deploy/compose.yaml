@@ -10,6 +10,7 @@ services:
     environment:
       APP_ENV: production
       GOLLUM_REF: main
+      PROJECTBOOK_SETTINGS_ADMIN: ${PROJECTBOOK_SETTINGS_ADMIN:-false}
       PROJECTBOOK_PUBLIC_URL: ${PROJECTBOOK_PUBLIC_URL:-}
       PROJECTBOOK_RAW_UPLOADS: /var/lib/projectbook/raw-uploads
       PROJECTBOOK_MCP_TOKEN: ${PROJECTBOOK_MCP_TOKEN:?Set an MCP token}

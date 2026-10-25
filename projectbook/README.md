@@ -564,3 +564,7 @@ before pulling that deletion. The `.gitignore` rule travels with the book, so
 this is a book-level policy even though its control is in Settings. Back up the
 persistent book directory separately when notes are not in Git. A fresh book
 without the ignore rule retains Git synchronization until explicitly disabled.
+
+Cloud settings remain read-only unless the deployment explicitly sets
+`PROJECTBOOK_SETTINGS_ADMIN=true`. Enable this only for an access-controlled
+instance whose admitted users may change settings. The Compose default is false.
