@@ -11,6 +11,144 @@ module Gollum
     MAX_TOTAL = 50 * 1024 * 1024
     UUID = /\A[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}\z/
     TYPES = {'image/jpeg'=>'jpg','image/png'=>'png','image/webp'=>'webp','image/heic'=>'heic','image/heif'=>'heif','audio/mp4'=>'m4a','audio/mpeg'=>'mp3','audio/webm'=>'webm','audio/ogg'=>'ogg','audio/wav'=>'wav','audio/x-wav'=>'wav','application/pdf'=>'pdf','text/plain'=>'txt','application/vnd.openxmlformats-officedocument.wordprocessingml.document'=>'docx'}.freeze
+    IGNORE = "*\n!.gitignore\n".freeze
+    def self.local?(wiki)
+      path = safe_path(wiki, 'raw-notes/.gitignore')
+      ::File.file?(path) && ::File.read(path).lines.any? { |line| line.strip == '*' }
+    end
+    def self.safe_path(wiki, path)
+      raise Error, 'Invalid note path.' unless path.start_with?('raw-notes/') && path.split('/').all? { |part| !part.empty? && !%w[. ..].include?(part) && !part.match?(/[\\\x00-\x1f]/) }
+      current = wiki.path
+      path.split('/').each do |part|
+        current = ::File.join(current, part)
+        raise Error, 'Symlinks are not supported in notes.' if ::File.symlink?(current)
+      end
+      current
+    end
+    @disk_hashes = {}
+    @disk_hash_lock = Mutex.new
+    def self.disk_entries(wiki)
+      root = safe_path(wiki, 'raw-notes/.gitignore')
+      Dir.glob(::File.join(::File.dirname(root), '**', '*'), ::File::FNM_DOTMATCH).filter_map do |path|
+        relative = path.delete_prefix(wiki.path + '/')
+        next if %w[. .. .gitignore].include?(::File.basename(path))
+        safe_path(wiki, relative)
+        next unless ::File.file?(path)
+        stat=::File.stat(path);key=[path,stat.size,stat.mtime.to_r,stat.ctime.to_r]
+        sha=@disk_hash_lock.synchronize do
+          @disk_hashes.shift while @disk_hashes.size>4096
+          @disk_hashes[key] ||= begin
+            digest=Digest::SHA1.new;digest << "blob #{stat.size}\0"
+            ::File.open(path,'rb') { |file| while (chunk=file.read(262144)); digest << chunk; end }
+            digest.hexdigest
+          end
+        end
+        {path: relative, sha: sha, bytes: stat.size, local: true}
+      end
+    end
+    def self.persist(wiki, writes, options, message)
+      if local?(wiki)
+        staged=[];originals={};applied=[]
+        begin
+          writes.each do |path,bytes|
+            target=safe_path(wiki,path);FileUtils.mkdir_p(::File.dirname(target))
+            originals[target]=::File.file?(target) ? ::File.binread(target) : nil
+            temp=target+'.tmp-'+SecureRandom.hex(8);staged<<[temp,target]
+            ::File.open(temp,'wb') { |file| file.write(bytes);file.flush;file.fsync }
+          end
+          staged.each { |temp,target| ::File.rename(temp,target);applied<<target }
+        rescue SystemCallError
+          applied.reverse_each { |target| originals[target] ? ::File.binwrite(target,originals[target]) : FileUtils.rm_f(target) }
+          raise Error.new('Could not save note on server disk. Your pending message can be retried.',507)
+        ensure
+          staged.each { |temp,_| FileUtils.rm_f(temp) }
+        end
+        nil
+      else
+        committer = Gollum::Committer.new(wiki, options.merge(message:message))
+        writes.each do |path, bytes|
+          committer.add(path,bytes)
+          committer.after_commit { |index,_| index.update_working_dir(path) }
+        end
+        committer.commit
+      end
+    end
+    def self.sync_settings(wiki)
+      ignore = safe_path(wiki,'raw-notes/.gitignore')
+      tracked = ProjectbookKnowledge.new(wiki,revision:wiki.commit_for(wiki.ref).id).entries.select { |e| e[:path].start_with?('raw-notes/') && e[:path] != 'raw-notes/.gitignore' }
+      {'sync_git'=>!local?(wiki),'tracked_files'=>tracked.length,'version'=>Digest::SHA256.hexdigest((::File.file?(ignore) ? ::File.read(ignore) : '')+wiki.commit_for(wiki.ref).id)}
+    end
+    def self.set_sync(wiki, input, options={})
+      raise Error.new('Deployment settings are read-only.',403) unless ENV['PROJECTBOOK_SETTINGS_ADMIN']=='true'
+      raise Error.new('Editing is disabled.',403) unless wiki.allow_editing
+      current=sync_settings(wiki)
+      raise Error.new('Settings changed. Reload before saving.',409) unless input['version']==current['version']
+      enabled=input['sync_git']; raise Error,'Expected a boolean.' unless [true,false].include?(enabled)
+      return current if enabled==current['sync_git']
+      if !enabled && current['tracked_files']>0 && input['confirm_untrack']!=true
+        raise Error.new('Confirm removing notes from Git tracking while keeping local files.',409)
+      end
+      entries=disk_entries(wiki)
+      ignore=safe_path(wiki,'raw-notes/.gitignore');FileUtils.mkdir_p(::File.dirname(ignore))
+      committer=Gollum::Committer.new(wiki,options.merge(message:enabled ? 'Enable Git synchronization for raw notes' : 'Keep raw notes local to this deployment'))
+      if enabled
+        entries.each { |e| committer.add(e[:path],::File.binread(safe_path(wiki,e[:path]))) }
+        committer.add('raw-notes/.gitignore',"# Raw Notes Git synchronization enabled\n")
+      else
+        snapshot=ProjectbookKnowledge.new(wiki,revision:wiki.commit_for(wiki.ref).id)
+        snapshot.entries.each do |e|
+          next unless e[:path].start_with?('raw-notes/') && e[:path]!='raw-notes/.gitignore'
+          target=safe_path(wiki,e[:path])
+          raise Error,'A tracked note is missing on disk; restore it before disabling synchronization.' unless ::File.file?(target)
+          committer.delete(e[:path])
+        end
+        committer.add('raw-notes/.gitignore',IGNORE)
+      end
+      # No deletion callbacks: the files deliberately stay in the working directory.
+      committer.commit
+      ::File.write(ignore, enabled ? "# Raw Notes Git synchronization enabled\n" : IGNORE)
+      system('git','-C',wiki.path,'reset','-q','HEAD','--','raw-notes',exception:true)
+      sync_settings(Gollum::Wiki.new(wiki.path,ref:wiki.ref))
+    end
+    def self.message_blocks(meta, body)
+      text=body.sub(/\A# [^\n]*\n/, '').strip
+      stored=meta['message_blocks']
+      stored.is_a?(Array) && stored.join("\n\n---\n\n").strip==text ? stored : text.split(/\n\n---\n\n/, -1)
+    end
+    def self.detail(wiki,id)
+      snapshot=ProjectbookKnowledge.new(wiki)
+      note=catalog(snapshot).find { |n| n['id']==id!(id) }
+      raise Error.new('Note not found.',404) unless note
+      entry=snapshot.entries.find { |e| e[:path]==note['path'] }
+      body=snapshot.text(entry)
+      metadata=JSON.parse(snapshot.text(snapshot.entries.find { |e| e[:path]==note['path'].sub('note.md','.note.json') }))
+      blocks=message_blocks(metadata,body)
+      note.merge('messages'=>blocks.each_with_index.map do |text,i|
+        files=note['attachments'].select { |f| text.include?("(media/#{f['name']})") }
+        files.each { |f| text=text.gsub(/!?\[#{Regexp.escape(f['name'])}\]\(media\/#{Regexp.escape(f['name'])}\)/,'') }
+        {'index'=>i,'text'=>text.strip,'attachments'=>files}
+      end)
+    end
+    def self.edit_message(wiki,input,options={})
+      raise Error.new('Editing is disabled.',403) unless wiki.allow_editing
+      note=detail(wiki,input['id'])
+      raise Error.new('The note changed. Reload before editing.',412) unless input['expected_version']==note['document_version']
+      index=input['index'];raise Error,'Message not found.' unless index.is_a?(Integer) && index>=0 && index<note['messages'].length
+      snapshot=ProjectbookKnowledge.new(wiki);path=note['path'];meta_path=path.sub('note.md','.note.json')
+      meta=JSON.parse(snapshot.text(snapshot.entries.find { |e| e[:path]==meta_path }))
+      blocks=message_blocks(meta,snapshot.text(snapshot.entries.find { |e| e[:path]==path }))
+      if input['delete']==true
+        blocks.delete_at(index)
+      else
+        text=input['text'];raise Error,'Use text up to 100000 characters.' unless text.is_a?(String) && text.length<=100000
+        blocks[index]=text + note['messages'][index]['attachments'].map { |f| "\n\n#{f['mime_type'].start_with?('image/') ? '!' : ''}[#{f['name']}](media/#{f['name']})" }.join
+      end
+      body=ProjectbookTitles.markdown_heading(note['title'])+"\n"+blocks.join("\n\n---\n\n")+"\n"
+      meta['message_blocks']=blocks
+      meta['attachments'].select! { |f| body.include?("(media/#{f['name']})") }
+      persist(wiki,[[path,body],[meta_path,JSON.pretty_generate(meta)+"\n"]],options,'Edit raw note message')
+      detail(Gollum::Wiki.new(wiki.path,ref:wiki.ref),input['id'])
+    end
     def self.id!(id)
       raise Error, 'Use a UUID request/file ID.' unless id.is_a?(String) && UUID.match?(id)
       id
@@ -94,7 +232,7 @@ module Gollum
         path = entry[:path].sub('.note.json','note.md')
         doc = snapshot.entries.find { |e| e[:path] == path }
         next unless doc
-        meta.merge('path'=>path,'url'=>snapshot.url(path),'version'=>entry[:sha], 'document_version'=>doc[:sha], 'title'=>ProjectbookTitles.title(snapshot.text(doc),path), 'excerpt'=>snapshot.text(doc).sub(/\A# [^\n]*\n/, '').gsub(/!?\[([^\]]*)\]\([^)]*\)/) { $1.start_with?('photo-', 'voice-') ? '' : $1 }.gsub(/\s+/, ' ').strip[0,280])
+        meta.reject { |key,_| key=='message_blocks' }.merge('path'=>path,'storage'=>(entry[:local] ? 'local' : 'git'),'url'=>snapshot.url('gollum/raw-notes/'+meta['id']),'version'=>entry[:sha], 'document_version'=>doc[:sha], 'title'=>ProjectbookTitles.title(snapshot.text(doc),path), 'excerpt'=>snapshot.text(doc).sub(/\A# [^\n]*\n/, '').gsub(/!?\[([^\]]*)\]\([^)]*\)/) { $1.start_with?('photo-', 'voice-') ? '' : $1 }.gsub(/\s+/, ' ').strip[0,280])
       end.sort_by { |item| Time.iso8601(item['created_at']) }.reverse
     end
     def self.prepare_attachments(wiki,files,folder,prefix='')
@@ -142,15 +280,13 @@ module Gollum
       end
       meta = {'schema'=>1,'id'=>id,'created_at'=>now.iso8601(6),'source'=>input['source'] == 'mcp' ? 'mcp' : 'web','status'=>'unsorted','results'=>[], 'fingerprint'=>fingerprint,
         'attachments'=>prepared.map { |path,bytes,mime,name| {'path'=>path,'name'=>name,'mime_type'=>mime,'bytes'=>bytes.bytesize} }}
+      meta['message_blocks']=[body.sub(/\A# [^\n]*\n/, '').strip]
       writes = prepared.map { |path,bytes,*_| [path,bytes] } + [[folder+'/note.md',body],[folder+'/.note.json',JSON.pretty_generate(meta)+"\n"]]
       ProjectbookSave.destination!(wiki,folder+'/note.md')
       writes.each { |path,_| ProjectbookSave.disk_check!(wiki,path) }
-      committer = Gollum::Committer.new(wiki, options.merge(message:'Create raw note'))
-      writes.each { |path,bytes| wiki.write_file(path,bytes,committer:committer,normalize:false) }
-      ProjectbookTree.append(wiki,committer,folder+'/note.md')
-      commit = committer.commit
+      commit = persist(wiki,writes,options,'Create raw note')
       files.each { |file| FileUtils.rm_f(::File.join(stage(wiki),file['upload_id'])) }
-      catalog(ProjectbookKnowledge.new(wiki)).find { |item| item['id'] == id }.merge('commit'=>commit)
+      catalog(ProjectbookKnowledge.new(Gollum::Wiki.new(wiki.path,ref:wiki.ref))).find { |item| item['id'] == id }.merge('commit'=>commit)
     end
     def self.append(wiki,input,options={})
       raise Error.new('Editing is disabled.',403) unless wiki.allow_editing
@@ -178,17 +314,14 @@ module Gollum
       prepared.each{|_,_,mime,name|body+="\n#{mime.start_with?('image/') ? '!' : ''}[#{name}](media/#{name})\n"}
       raise Error,'Note exceeds 2 MiB; start another note.' if body.bytesize>2*1024*1024
       meta['attachments']+=prepared.map{|path,bytes,mime,name|{'path'=>path,'name'=>name,'mime_type'=>mime,'bytes'=>bytes.bytesize}}
+      old_blocks=message_blocks(meta,previous)
+      meta['message_blocks']=old_blocks+[body.delete_prefix(previous.rstrip+"\n\n---\n\n").strip]
       meta['status']='unsorted'
       meta['messages']||=[];meta['messages']<<{'id'=>message_id,'fingerprint'=>fingerprint,'created_at'=>Time.now.utc.iso8601(6)}
       ProjectbookSave.disk_check!(wiki,note['path'],previous)
       ProjectbookSave.disk_check!(wiki,metadata_path,previous_metadata)
       prepared.each{|path,*_|ProjectbookSave.disk_check!(wiki,path)}
-      committer=Gollum::Committer.new(wiki,options.merge(message:'Append raw note message'))
-      [[note['path'],body],[metadata_path,JSON.pretty_generate(meta)+"\n"]].each do |path,content|
-        committer.add(path,content);committer.after_commit{|index,_|index.update_working_dir(path)}
-      end
-      prepared.each{|path,bytes,*_|wiki.write_file(path,bytes,committer:committer,normalize:false)}
-      commit=committer.commit
+      commit=persist(wiki,[[note['path'],body],[metadata_path,JSON.pretty_generate(meta)+"\n"]]+prepared.map{|path,bytes,*_|[path,bytes]},options,'Append raw note message')
       files.each{|f|FileUtils.rm_f(::File.join(stage(wiki),f['upload_id']))}
       catalog(ProjectbookKnowledge.new(Gollum::Wiki.new(wiki.path,ref:wiki.ref))).find{|n|n['id']==id}.merge('commit'=>commit)
     end
@@ -206,10 +339,7 @@ module Gollum
       meta = JSON.parse(previous).merge('status'=>status,'results'=>results)
       return note.merge('unchanged'=>true) if JSON.parse(previous) == meta
       ProjectbookSave.disk_check!(wiki,path,previous)
-      committer = Gollum::Committer.new(wiki,options.merge(message:'Update raw note status'))
-      committer.add(path,JSON.pretty_generate(meta)+"\n")
-      committer.after_commit { |index,_| index.update_working_dir(path) }
-      committer.commit
+      persist(wiki,[[path,JSON.pretty_generate(meta)+"\n"]],options,'Update raw note status')
       fresh = Gollum::Wiki.new(wiki.path, ref: wiki.ref)
       catalog(ProjectbookKnowledge.new(fresh)).find { |item| item['id'] == id }
     end

@@ -189,6 +189,28 @@ module Precious
         cache_control :no_store
         mustache :raw_notes
       end
+      get '/raw-notes/:id' do
+        cache_control :no_store
+        mustache :raw_notes
+      end
+      get '/projectbook/raw-notes-settings' do
+        content_type :json; cache_control :no_store
+        Gollum::ProjectbookRawNotes.sync_settings(wiki_new).merge(editable: ENV['PROJECTBOOK_SETTINGS_ADMIN']=='true').to_json
+      end
+      get '/projectbook/raw-notes-media/*' do
+        cache_control :no_store
+        begin
+          path=params[:splat].first
+          snapshot=Gollum::ProjectbookKnowledge.new(wiki_new)
+          note=Gollum::ProjectbookRawNotes.catalog(snapshot).find { |n| n['attachments'].any? { |f| f['path']==path } }
+          halt 404 unless note
+          attachment=note['attachments'].find { |f| f['path']==path }
+          target=Gollum::ProjectbookRawNotes.safe_path(wiki_new,path)
+          send_file target, type: attachment['mime_type'], disposition: attachment['mime_type'].start_with?('image/','audio/') ? 'inline' : 'attachment'
+        rescue Gollum::ProjectbookCreation::Error => e
+          halt e.status
+        end
+      end
       get '/projectbook/raw-notes' do
         content_type :json
         cache_control :no_store
@@ -197,7 +219,7 @@ module Precious
       get '/projectbook/raw-notes/:id' do
         content_type :json
         cache_control :no_store
-        note=Gollum::ProjectbookRawNotes.catalog(Gollum::ProjectbookKnowledge.new(wiki_new)).find{|n|n['id']==params[:id]}
+        note=Gollum::ProjectbookRawNotes.detail(wiki_new,params[:id])
         halt 404, {error:'Note not found.'}.to_json unless note
         note.merge(editable:@allow_editing).to_json
       end
@@ -213,6 +235,8 @@ module Precious
           when 'upload' then service.upload(wiki_new, **input.transform_keys(&:to_sym))
           when 'create' then service.create(wiki_new, input, commit_options)
           when 'append' then service.append(wiki_new,input,commit_options)
+          when 'edit-message' then service.edit_message(wiki_new,input,commit_options)
+          when 'settings' then service.set_sync(wiki_new,input,commit_options)
           when 'status' then service.status(wiki_new, **input.transform_keys(&:to_sym), options: commit_options)
           else halt 404
           end

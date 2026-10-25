@@ -1,9 +1,10 @@
 <main id="wiki-wrapper" class="pb-settings-page" aria-labelledby="projectbook-settings-title">
   <div class="pb-settings-heading"><h1 id="projectbook-settings-title">Settings</h1></div>
-  <p class="pb-settings-muted">For this deployment only. Settings are stored outside the book and are not synced through Git.</p>
+  <p class="pb-settings-muted">Search and navigation settings belong to this deployment. Raw Notes synchronization is controlled by a .gitignore rule in the book.</p>
   <nav class="pb-settings-tabs" role="tablist" aria-label="Settings sections">
     <a id="pb-semantic-tab" href="#semantic-search" role="tab" aria-selected="true" aria-controls="semantic-search">Semantic Search</a>
     <a id="pb-navigation-tab" href="#navigation" role="tab" aria-selected="false" aria-controls="navigation">Navigation</a>
+    <a href="#raw-notes-settings" role="tab" aria-selected="false" aria-controls="raw-notes-settings">Raw Notes</a>
   </nav>
   <section id="semantic-search" role="tabpanel" aria-labelledby="pb-semantic-tab">
   <p id="pb-settings-connection" role="status" aria-live="polite"></p>
@@ -43,6 +44,13 @@
       <button class="btn" id="pb-navigation-reload" type="button">Reload</button>
       <p id="pb-navigation-message" role="status"></p>
     </form>
+  </section>
+  <section id="raw-notes-settings" role="tabpanel" hidden>
+    <h2>Raw Notes storage</h2>
+    <p>Notes always stay in the raw-notes directory inside the book. Git synchronization is controlled by its .gitignore file.</p>
+    <label><input type="checkbox" id="raw-sync-git" disabled> Synchronize notes through Git</label>
+    <p>When disabled, notes remain on this deployment only. Disabling removes previously tracked notes from the current Git revision, while keeping files here; other deployments receive those deletions on pull. Git history is retained.</p>
+    <button class="btn" id="raw-sync-save" disabled>Save</button><p id="raw-sync-status" role="status"></p>
   </section>
 </main>
 <style>
@@ -154,7 +162,7 @@
 (() => {
   const tabs = [...document.querySelectorAll('.pb-settings-tabs [role="tab"]')];
   function select() {
-    const active = location.hash === '#navigation' ? 'navigation' : 'semantic-search';
+    const active = ['navigation','raw-notes-settings'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'semantic-search';
     tabs.forEach(tab => { const yes = tab.getAttribute('aria-controls') === active; tab.setAttribute('aria-selected', String(yes)); document.getElementById(tab.getAttribute('aria-controls')).hidden = !yes; });
   }
   window.addEventListener('hashchange', select); select();
@@ -183,4 +191,10 @@
   });
   load();
 })();
+</script>
+
+<script>
+(()=>{let current;const box=document.getElementById('raw-sync-git'),save=document.getElementById('raw-sync-save'),status=document.getElementById('raw-sync-status');
+async function load(){try{const response=await fetch(baseUrl+'/gollum/projectbook/raw-notes-settings',{cache:'no-store'});current=await response.json();if(!response.ok)throw Error(current.error||'Could not load settings');box.checked=current.sync_git;box.disabled=!current.editable;save.disabled=!current.editable;}catch(e){status.textContent=e.message;}}
+save.onclick=async()=>{if(!box.checked&&current.tracked_files&&!confirm('Remove existing notes from Git tracking? Files stay on this server, but the removal will be sent to GitHub and other deployments. Git history remains.'))return;save.disabled=true;try{const response=await fetch(baseUrl+'/gollum/projectbook/raw-notes/settings',{method:'POST',headers:{'Content-Type':'application/json','X-ProjectWiki-Request':'1'},body:JSON.stringify({sync_git:box.checked,version:current.version,confirm_untrack:true})});const result=await response.json();if(!response.ok)throw Error(result.error||'Could not save settings');status.textContent='Saved';await load();}catch(e){status.textContent=e.message;save.disabled=false;}};load();})();
 </script>

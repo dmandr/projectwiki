@@ -51,6 +51,7 @@ module Gollum
         raise Error, 'Use a full commit SHA from this book history.'
       end
       @revision = revision || @head
+      @local_notes = !revision && ProjectbookRawNotes.local?(wiki)
     end
 
     def git(*args)
@@ -60,11 +61,14 @@ module Gollum
     end
 
     def entries
-      @entries ||= git('ls-tree', '-rz', '-l', @revision).split("\0").filter_map do |record|
+      @entries ||= begin
+      result = git('ls-tree', '-rz', '-l', @revision).split("\0").filter_map do |record|
         header, path = record.split("\t", 2)
         mode, type, sha, size = header.split
         next unless type == 'blob' && %w[100644 100755].include?(mode)
         {path: path, sha: sha, bytes: size.to_i}
+      end
+      @local_notes ? result.reject { |e| e[:path].start_with?('raw-notes/') } + ProjectbookRawNotes.disk_entries(@wiki) : result
       end
     end
 
@@ -79,6 +83,7 @@ module Gollum
 
     def text(entry)
       raise Error, 'File exceeds the 2 MiB text limit.' if entry[:bytes] > MAX_TEXT
+      return ::File.read(ProjectbookRawNotes.safe_path(@wiki,entry[:path])) if entry[:local]
       self.class.cached_text([::File.expand_path(@wiki.path), entry[:sha]]) { git('cat-file', 'blob', entry[:sha]) }
     end
 
@@ -221,6 +226,7 @@ module Gollum
     end
 
     def document_path!(path)
+      raise Error, 'Use edit_raw_note_message for local notes.' if path.start_with?('raw-notes/') && ProjectbookRawNotes.local?(@wiki)
       ProjectbookSave.path!(path)
       raise Error, 'Use a visible Markdown document path.' unless path.match?(/\.(md|markdown)\z/i) && !path.split('/').any? { |p| p.start_with?('_') }
     end
@@ -282,7 +288,7 @@ module Gollum
     def read_raw_note(id:)
       note = ProjectbookRawNotes.catalog(self).find { |item| item['id'] == id }
       raise Error.new('Note not found.',404) unless note
-      note.merge('document'=>read_document(path: note['path']))
+      (@revision == @head ? ProjectbookRawNotes.detail(@wiki,id) : note).merge('document'=>read_document(path: note['path']))
     end
     def upload_raw_note_attachment(upload_id:, offset:, data:)
       document_write_allowed!
@@ -294,7 +300,7 @@ module Gollum
       raise Error, 'At most 20 attachments per note.' if files.length + attachments.length > 20
       input['attachments'] += files.map { |f| ProjectbookRawNotes.download(@wiki, f.transform_keys(&:to_s)) }
       result = ProjectbookRawNotes.create(@wiki,input,{name:'ProjectBook agent',email:'agent@projectbook.local'})
-      result.merge('url'=>url(result['path']))
+      result.merge('url'=>url('gollum/raw-notes/'+result['id']))
     end
     def append_raw_note(id:, message_id:, expected_version:, text: '', attachments: [], files: [])
       document_write_allowed!
@@ -302,7 +308,11 @@ module Gollum
       input={'id'=>id,'message_id'=>message_id,'expected_version'=>expected_version,'text'=>text,'attachments'=>attachments.map{|f|f.transform_keys(&:to_s)}}
       input['attachments']+=files.map{|f|ProjectbookRawNotes.download(@wiki,f.transform_keys(&:to_s))}
       result=ProjectbookRawNotes.append(@wiki,input,{name:'ProjectBook agent',email:'agent@projectbook.local'})
-      result.merge('url'=>url(result['path']))
+      result.merge('url'=>url('gollum/raw-notes/'+result['id']))
+    end
+    def edit_raw_note_message(id:, index:, expected_version:, text: '', delete: false)
+      document_write_allowed!
+      ProjectbookRawNotes.edit_message(@wiki,{'id'=>id,'index'=>index,'expected_version'=>expected_version,'text'=>text,'delete'=>delete},{name:'ProjectBook agent',email:'agent@projectbook.local'})
     end
     def set_raw_note_status(id:, expected_version:, status:, results: [])
       document_write_allowed!

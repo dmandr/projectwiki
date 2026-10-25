@@ -16,7 +16,7 @@ module Gollum
       LOCK = Mutex.new
       def initialize(app); @app = app; end
       def call(env)
-        return @app.call(env) if %w[GET HEAD OPTIONS].include?(env['REQUEST_METHOD'])
+        return @app.call(env) if %w[GET HEAD OPTIONS].include?(env['REQUEST_METHOD']) && !env['PATH_INFO'].to_s.start_with?('/gollum/projectbook/raw-notes')
         LOCK.synchronize { @app.call(env) }
       end
     end

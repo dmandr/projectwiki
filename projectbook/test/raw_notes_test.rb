@@ -136,3 +136,61 @@ class RawNotesTest
     assert_equal bytes,wiki.file(note['attachments'][0]['path']).raw_data
   end
 end
+
+class RawNotesLocalTest < RawNotesTest
+  def setup
+    super
+    @old_admin=ENV['PROJECTBOOK_SETTINGS_ADMIN'];ENV['PROJECTBOOK_SETTINGS_ADMIN']='true'
+  end
+  def teardown
+    ENV['PROJECTBOOK_SETTINGS_ADMIN']=@old_admin
+    super
+  end
+  def test_local_roundtrip_keeps_files_and_mcp_and_reenables_git
+    note=service.create(wiki,{'id'=>ID,'text'=>'Original','attachments'=>[upload]},{})
+    settings=service.sync_settings(wiki)
+    assert_raises(service::Error){service.set_sync(wiki,{'sync_git'=>false,'version'=>settings['version']})}
+    service.set_sync(wiki,{'sync_git'=>false,'version'=>settings['version'],'confirm_untrack'=>true})
+    assert ::File.file?(::File.join(@dir,note['path']))
+    refute_includes snapshot.git('ls-tree','-r','--name-only','HEAD'),note['path']
+    before=head
+    local=snapshot.read_raw_note(id:ID)
+    assert_equal 'local',local['storage']
+    assert_includes local['document'][:content],'Original'
+    bytes=snapshot.read_attachment(path:note['attachments'][0]['path'],format:'bytes')
+    assert_equal 'test-photo',Base64.strict_decode64(bytes[:data])
+    note=service.append(wiki,{'id'=>ID,'message_id'=>'44444444-4444-4444-8444-444444444444','expected_version'=>local['document_version'],'text'=>'Local addition'})
+    assert_equal before,head
+    detail=service.detail(wiki,ID);assert_equal 2,detail['messages'].length
+    service.edit_message(wiki,{'id'=>ID,'index'=>1,'text'=>'Edited','expected_version'=>detail['document_version']})
+    assert_equal 'Edited',service.detail(wiki,ID)['messages'][1]['text']
+    detail=service.detail(wiki,ID)
+    service.edit_message(wiki,{'id'=>ID,'index'=>0,'delete'=>true,'expected_version'=>detail['document_version']})
+    assert_empty service.detail(wiki,ID)['attachments']
+    assert_equal before,head
+    settings=service.sync_settings(wiki)
+    service.set_sync(wiki,{'sync_git'=>true,'version'=>settings['version']})
+    assert_includes snapshot.git('ls-tree','-r','--name-only','HEAD'),note['path']
+    assert_equal 'git',snapshot.read_raw_note(id:ID)['storage']
+    assert_equal '',snapshot.git('status','--porcelain')
+  end
+  def test_message_markdown_separator_and_stale_edits
+    note=service.create(wiki,{'id'=>ID,'text'=>"First\n\n---\n\nStill first"},{})
+    assert_equal 1,service.detail(wiki,ID)['messages'].length
+    result=service.append(wiki,{'id'=>ID,'message_id'=>'44444444-4444-4444-8444-444444444444','expected_version'=>note['document_version'],'text'=>'Second'})
+    assert_equal 2,service.detail(wiki,ID)['messages'].length
+    assert_raises(service::Error){service.edit_message(wiki,{'id'=>ID,'index'=>0,'text'=>'stale','expected_version'=>note['document_version']})}
+    service.edit_message(wiki,{'id'=>ID,'index'=>0,'text'=>'Updated','expected_version'=>result['document_version']})
+    assert_equal 'Updated',service.detail(wiki,ID)['messages'][0]['text']
+  end
+  def test_new_local_note_and_symlink_rejection
+    settings=service.sync_settings(wiki);service.set_sync(wiki,{'sync_git'=>false,'version'=>settings['version']})
+    before=head
+    note=service.create(wiki,{'id'=>ID,'text'=>'Never committed','attachments'=>[upload]},{})
+    assert_equal before,head
+    assert_equal 'local',note['storage']
+    assert service.create(wiki,{'id'=>ID,'text'=>'Never committed','attachments'=>[{'upload_id'=>UP,'name'=>'photo.jpg','mime_type'=>'image/jpeg','sha256'=>Digest::SHA256.hexdigest('test-photo')}]},{})['unchanged']
+    ::File.symlink('/tmp',::File.join(@dir,'raw-notes','unsafe'))
+    assert_raises(service::Error){service.safe_path(wiki,'raw-notes/unsafe/secret')}
+  end
+end

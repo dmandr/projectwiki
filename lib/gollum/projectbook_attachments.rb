@@ -27,6 +27,9 @@ module Gollum
     end
 
     def with_attachment(entry)
+      if entry[:local]
+        return ::File.open(ProjectbookRawNotes.safe_path(@wiki,entry[:path]),'rb') { |file| yield file }
+      end
       Tempfile.create(['projectbook-attachment', '.bin']) do |file|
         file.binmode
         ok = system({'GIT_OPTIONAL_LOCKS' => '0'}, 'git', '-C', @wiki.path, 'cat-file', 'blob', entry[:sha], out: file, err: ::File::NULL)
@@ -42,6 +45,7 @@ module Gollum
       entry = attachment!(path)
       metadata = entry.merge(revision: revision, mime_type: attachment_mime(entry), uri: attachment_uri(entry),
         resource_limit_bytes: MAX_RESOURCE)
+      raise Error, 'Local note attachments require format=bytes without a Git revision.' if entry[:local] && format=='resource'
       if format == 'resource'
         raise Error, 'Use format=bytes for byte ranges.' unless offset == 0
         metadata.merge(resource_link: {type: 'resource_link', uri: attachment_uri(entry), name: ::File.basename(path),

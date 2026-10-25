@@ -531,10 +531,36 @@ operations. See [Shared Git assets](SHARED-ASSETS.md) for implementation details
 
 ### Raw Notes chat controls
 
-Saved messages appear as chronological chat bubbles. The bottom composer has a
-`+` menu for Camera, Photos and Files (photos, audio, PDF, TXT and DOCX; no video).
-Record shows a red recording indicator, elapsed time and a scrolling waveform from the live microphone;
-Stop adds the clip to the draft for listening before Send. A recording requires
-HTTPS or localhost and microphone permission. Send during recording stops capture, waits for the final audio fragment and sends
-the message. Send is disabled while microphone permission is pending. The original audio remains in Git; this does
-not perform transcription.
+Notes open as individual chats. The bottom composer grows with the text: the
+microphone becomes Send while typing, and Clear discards unsent text. Enter adds
+a line break. One `+` input invokes the native attachment picker (photos, audio,
+PDF, TXT and DOCX); the browser/OS controls the available camera/library/file
+choices. Video is not supported yet. Photos are resized to 2048 px when possible.
+
+Selected attachments upload immediately as individual messages. Record shows a
+live waveform and timer; Stop sends the recording, Cancel discards it. Uploads
+are serialized with progress and idempotent retry IDs. The composer remains
+usable during uploads. Pending messages are stored in IndexedDB when available;
+closing Safari can interrupt transfers, so wait for “Saved on server”. Reopen
+the same note to retry pending messages. Tap text or its edit icon to change it;
+Delete removes a message from the visible note (original media is retained on
+disk). Close returns to the notes list; the top + starts a separate note.
+
+### Optional Git synchronization for notes
+
+Settings → Raw Notes controls `raw-notes/.gitignore`. Off writes `*` plus an
+exception for `.gitignore` itself; notes stay on the deployment's persistent
+book disk. On replaces the ignore rule and commits the notes on disk. No separate
+notes database is required. Both UI and MCP read local notes in this mode;
+`read_raw_note` supplies messages and `storage`, and `edit_raw_note_message`
+edits/deletes a message with `document_version`. Local attachment bytes are
+available through `read_attachment(format="bytes")` without a Git revision.
+Local notes are not included in the Git-based RAG index or historical snapshots.
+
+Disabling requires confirmation when notes are already tracked: it removes them
+from the current Git tree while keeping files on this deployment. The deletion
+propagates on push/pull; history is not erased. Back up other deployments' notes
+before pulling that deletion. The `.gitignore` rule travels with the book, so
+this is a book-level policy even though its control is in Settings. Back up the
+persistent book directory separately when notes are not in Git. A fresh book
+without the ignore rule retains Git synchronization until explicitly disabled.
