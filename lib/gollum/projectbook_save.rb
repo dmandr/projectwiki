@@ -25,7 +25,7 @@ module Gollum
       end
     end
 
-    def self.destination!(wiki, target, system_task: false)
+    def self.destination!(wiki, target, system_task: false, markdown: true)
       parts = target.split('/')
       if system_task
         identity = ProjectbookTasks.identity(target)
@@ -33,7 +33,7 @@ module Gollum
       else
         parts.each { |part| ProjectbookCreation.segment!(part) }
       end
-      raise Error, 'Keep a Markdown file extension.' unless Gollum::Page.format_for(target) == :markdown
+      raise Error, 'Keep a Markdown file extension.' if markdown && Gollum::Page.format_for(target) != :markdown
       prefix = wiki.page_file_dir.to_s.sub(%r{/+\z}, '')
       revision = wiki.commit_for(wiki.ref)&.id
       paths = revision ? wiki.tree_map_for(revision).map { |entry| prefix.empty? ? entry.path : entry.path.delete_prefix(prefix + '/') } : []
@@ -142,6 +142,8 @@ module Gollum
       end
       prepared.each { |path, temp| wiki.write_file(path, ::File.binread(temp.path), commit) }
       ProjectbookTasks.add(wiki, committer, tasks)
+      ProjectbookTree.append(wiki, committer, target) if defined?(ProjectbookTree) && (input['create'] == true || source != target)
+      yield(committer) if block_given?
       {path: target, commit: committer.commit}
     end
   end

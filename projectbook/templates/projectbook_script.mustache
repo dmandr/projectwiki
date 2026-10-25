@@ -1,6 +1,35 @@
 <script src="{{base_url}}/projectbook-editor/names.js"></script>
 <script>
 (function () {
+  const header = document.querySelector('.projectbook-topbar');
+  const tooltip = document.getElementById('projectbook-toolbar-tooltip');
+  let tooltipOwner;
+  function hideTooltip() {
+    tooltip.hidden = true;
+    tooltipOwner?.removeAttribute('aria-describedby');
+    tooltipOwner = null;
+  }
+  function showTooltip(button) {
+    hideTooltip(); tooltipOwner = button;
+    tooltip.textContent = button.dataset.tooltip;
+    tooltip.hidden = false;
+    button.setAttribute('aria-describedby', tooltip.id);
+    const rect = button.getBoundingClientRect();
+    tooltip.style.left = Math.max(8, Math.min(rect.left + rect.width / 2 - tooltip.offsetWidth / 2, window.innerWidth - tooltip.offsetWidth - 8)) + 'px';
+    tooltip.style.top = rect.bottom + 8 + 'px';
+  }
+  header.querySelectorAll('[data-tooltip]').forEach(button => {
+    // Keep native title as a no-JavaScript fallback, not a second tooltip.
+    button.removeAttribute('title');
+    button.addEventListener('pointerenter', event => { if (event.pointerType !== 'touch') showTooltip(button); });
+    button.addEventListener('pointerleave', hideTooltip);
+    button.addEventListener('focus', () => showTooltip(button));
+    button.addEventListener('blur', hideTooltip);
+  });
+  header.addEventListener('click', hideTooltip);
+  document.addEventListener('keydown', event => { if (event.key === 'Escape') hideTooltip(); });
+  window.addEventListener('scroll', hideTooltip, true);
+  window.addEventListener('resize', hideTooltip);
   const tree = document.getElementById('projectbook-tree');
   const filter = document.getElementById('projectbook-search');
   document.getElementById('projectbook-print')?.addEventListener('click', () => window.print());
@@ -121,7 +150,7 @@
     if (!target) return;
     const row = target.closest('li');
     const folder = row.hasAttribute('data-folder') ? row : null;
-    const visible = links.filter(link => !link.closest('[hidden]'));
+    const visible = [...tree.querySelectorAll('a[data-document],a[data-folder-link]')].filter(link => !link.closest('[hidden]'));
     const link = folder ? controls.get(folder).link : target;
     let next;
     if (event.key === 'ArrowDown') next = visible[visible.indexOf(link) + 1];

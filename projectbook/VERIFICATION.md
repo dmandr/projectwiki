@@ -286,3 +286,28 @@
 - Browser verified embedded list rendering and absence of Tasks/TaskLists/system directory in tree and root file overview. Created Hidden storage verification in the playground document; Save created its file under .projectbook/tasks, then its checkbox updated successfully. Live MCP read_todo returned that hidden path and done status.
 - The initial image omitted the migration module from the gem manifest; corrected packaging and rebuilt. The final port-4000 deployment is healthy. No application commit/push; only test-book migration and UI verification commits.
 - PLAN records manual ordering and drag/drop moves as the next priority after TODO acceptance.
+# Tree editing — 25 October 2026
+
+- Previous TODO/editor changes committed as `44d2467d`, without push. Tree changes remain uncommitted for review.
+- Docker deployment on port 4000. Isolated disposable fixture: `00-tree-review` with Alpha, Beta, Charlie and archive.
+- Real browser drag and drop: moved Charlie before Alpha; tree changed without reload; folder overview retained alphabetical order. Reload preserved the tree order.
+- Moving Charlie into archive displayed confirmation. Cancel kept the file in place; OK moved it and expanded the destination. Disabling confirmation in Settings → Navigation allowed moving it back without a dialog. Re-enabled confirmation afterwards.
+- Server tests cover single-commit moves/order updates, stale revisions, local edits, case/path collisions, hidden paths, CSRF, byte-exact PDF moves, empty source folders, no-op reorder, manual folder ordering, appending new documents, and hidden `.order` rendering. Settings tests cover persistence without RAG and stale settings versions.
+- Final checks: 47 Ruby tests / 428 assertions, 23 editor JavaScript tests, 2 settings UI tests; all passed. Existing TODO, MCP, editor-save, delete and navigation tests rerun. JavaScript editor tests include drag target classification; existing settings recovery tests remain green.
+- Scope: documents and attachments move between folders; folders themselves can be reordered but cannot yet be moved. Markdown links inside moved documents are rebased; incoming links from other documents retain their original destinations. Tree editing is disabled inside the editor and while tree search is active.
+
+Toolbar tooltips: all top-bar icons now show English action descriptions on hover or keyboard focus. History describes book-wide changes on Home and document history elsewhere. Verified the rendered Home toolbar, keyboard focus, Escape dismissal, and screenshot on port 4000. No commit/push.
+# Callouts and footnotes — 25 October 2026
+
+- Fixture `playground/callouts-review.md`: all five callout types, bold text, a two-item list, relative links and footnotes.
+- Browser: convert an ordinary paragraph to Warning, switch Visual/Markdown, return to Paragraph without losing formatting, insert a footnote through the dialog, and exit a final empty callout paragraph with Enter. Saved through the normal editor and inspected the rendered page: both list items remain distinct and footnotes render with backlinks.
+- Parser tests exercise all five alert markers and round trips; server tests verify structured lists, formatting, code examples, unknown quote types and footnotes. Move regression verifies footnote prose is not misinterpreted as a link definition.
+- Blocks use supported MDXEditor/Lexical extension points; no editor fork. Code-block UI remains unchanged. No application commit or push.
+
+## 2026-10-25 — accepted features, first-position drop and shared plan
+
+- User authorized committing tree editing, toolbar tooltips, callouts and footnotes; no push. Earlier uncommitted status entries above describe their review stages.
+- Widened folder reorder edges to thirds, accepted the whole row including the disclosure area, and added a stable 18px drop strip above the root list. Feedback names the intended target. The strip does not shift rows when dragging starts.
+- Browser verification on port 4000: moved the first folder above plan.md, dragged plan.md back through the new top strip, observed Order saved, and reloaded. Plan remained first; the folder stayed in the root. No JavaScript errors.
+- Replaced the stale roadmap with checked completed work and prioritized remaining work. Saved the same bytes to the user-created plan.md through MCP preview/save with expected_version; verified byte equality with application PLAN.md. AGENTS.md now requires keeping both copies reconciled and synchronized.
+- Final rebuilt Docker services healthy. Editor tests: 27 passed. Ruby regression suite: 50 tests, 465 assertions, no failures/errors. Screenshot: projectbook/.runtime/shared-plan.png (local ignored evidence).

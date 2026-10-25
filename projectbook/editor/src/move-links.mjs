@@ -1,5 +1,7 @@
 import { fromMarkdown } from 'mdast-util-from-markdown';
 import { toMarkdown } from 'mdast-util-to-markdown';
+import {gfmFootnote} from 'micromark-extension-gfm-footnote';
+import {gfmFootnoteFromMarkdown,gfmFootnoteToMarkdown} from 'mdast-util-gfm-footnote';
 import { frontmatter } from 'micromark-extension-frontmatter';
 import { frontmatterFromMarkdown } from 'mdast-util-frontmatter';
 
@@ -46,7 +48,7 @@ function rebaseHtml(html, from, to) {
 
 export function rebaseMarkdown(source, from, to) {
   if (from === to) return source;
-  const tree = fromMarkdown(source, {extensions: [frontmatter(['yaml', 'toml'])], mdastExtensions: [frontmatterFromMarkdown(['yaml', 'toml'])]});
+  const tree = fromMarkdown(source, {extensions: [frontmatter(['yaml', 'toml']),gfmFootnote()], mdastExtensions: [frontmatterFromMarkdown(['yaml', 'toml']),gfmFootnoteFromMarkdown()]});
   const edits = [];
   function rewrite(node) {
     let changed = false;
@@ -64,7 +66,7 @@ export function rebaseMarkdown(source, from, to) {
   function visit(node) {
     if (['link', 'image', 'definition', 'html'].includes(node.type)) {
       if (rewrite(node)) edits.push({start: node.position.start.offset, end: node.position.end.offset,
-        text: node.type === 'html' ? node.value : toMarkdown(node).trimEnd()});
+        text: node.type === 'html' ? node.value : toMarkdown(node,{extensions:[gfmFootnoteToMarkdown()]}).trimEnd()});
     } else for (const child of node.children || []) visit(child);
   }
   visit(tree);

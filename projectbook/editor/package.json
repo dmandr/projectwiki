@@ -1,7 +1,7 @@
 {
   "name": "projectbook-gollum-editor",
   "version": "1.0.0",
-  "description": "\u041f\u0440\u043e\u0432\u0435\u0440\u0435\u043d\u043e \u043d\u0430 macOS / Apple Silicon \u0438 Docker Desktop 2026-10-24.",
+  "description": "Проверено на macOS / Apple Silicon и Docker Desktop 2026-10-24.",
   "scripts": {
     "build": "node build.mjs",
     "test": "node --test test/*.test.mjs"
@@ -11,19 +11,22 @@
   "license": "ISC",
   "dependencies": {
     "@codemirror/view": "6.43.15",
+    "@lexical/history": "0.48.0",
+    "@lexical/plain-text": "0.48.0",
     "@lexical/react": "0.48.0",
+    "@lexical/rich-text": "0.48.0",
     "@mdxeditor/editor": "4.3.3",
+    "@mdxeditor/gurx": "1.2.4",
     "esbuild": "0.28.2",
     "lexical": "0.48.0",
-    "react": "19.3.1",
-    "react-dom": "19.3.1",
     "mdast-util-from-markdown": "2.1.0",
-    "mdast-util-to-markdown": "2.2.0",
     "mdast-util-frontmatter": "2.0.1",
+    "mdast-util-gfm-footnote": "2.1.0",
+    "mdast-util-to-markdown": "2.2.0",
     "micromark-extension-frontmatter": "2.0.0",
-    "@mdxeditor/gurx": "1.2.4",
-    "@lexical/plain-text": "0.48.0",
-    "@lexical/history": "0.48.0"
+    "micromark-extension-gfm-footnote": "2.1.0",
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
   },
   "private": true
 }

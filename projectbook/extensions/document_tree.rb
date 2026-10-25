@@ -1,10 +1,12 @@
 require 'cgi'
 require 'gollum/navigation_index'
+require 'gollum/projectbook_tree'
 
 module ProjectBookDocumentTree
   def projectbook_tree_html
     wiki = Gollum::Wiki.new(Precious::App.gollum_path, Precious::App.wiki_options)
-    Gollum::NavigationIndex.for(wiki).tree_html(base_url.to_s) do |entries|
+    snapshot = (@projectbook_navigation_snapshot ||= Gollum::NavigationIndex.for(wiki))
+    snapshot.tree_html(base_url.to_s) do |entries|
       root = {}
       entries.each do |entry|
         parts = entry.url_path.split('/')
@@ -12,15 +14,24 @@ module ProjectBookDocumentTree
         folder = parts.inject(root) { |node, part| (node[part] ||= { children: {} })[:children] }
         folder[leaf] = { path: entry.url_path, title: entry.title } unless leaf == '.gitkeep'
       end
+      @projectbook_tree_wiki = wiki
+      @projectbook_tree_revision = snapshot.revision
+      @projectbook_order_folders = wiki.tree_map_for(snapshot.revision).filter_map { |entry| Gollum::ProjectbookTree.parent(entry.path) if entry.name == '.order' }
       @projectbook_folder_number = 0
       projectbook_render_nodes(root)
     end
   end
 
+  def projectbook_tree_revision
+    wiki = Gollum::Wiki.new(Precious::App.gollum_path, Precious::App.wiki_options)
+    (@projectbook_navigation_snapshot ||= Gollum::NavigationIndex.for(wiki)).revision
+  end
+
   private
 
   def projectbook_render_nodes(nodes, parent = '')
-    nodes.sort_by { |name, node| [node[:children] ? 0 : 1, name.downcase] }.map do |name, node|
+    order = @projectbook_tree_wiki && @projectbook_order_folders.include?(parent) ? Gollum::ProjectbookTree.read_order(@projectbook_tree_wiki, parent, @projectbook_tree_revision) : []
+    nodes.sort_by { |name, node| [node[:children] ? 0 : 1, name.downcase] }.sort_by { |name, _| order.index(name) || order.length }.map do |name, node|
       path = [parent, name].reject(&:empty?).join('/')
       escaped_path = CGI.escapeHTML(path)
       label = CGI.escapeHTML(node[:title] || name)

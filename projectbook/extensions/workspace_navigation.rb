@@ -51,6 +51,10 @@ module ProjectBookWorkspaceNavigation
     home && !projectbook_history_screen ? latest_changes_path : history_path + '/' + @page.escaped_url_path
   end
 
+  def projectbook_history_tooltip
+    projectbook_history_url == latest_changes_path ? 'View recent changes across the book' : 'View the revision history of this document'
+  end
+
   def projectbook_history_screen
     %w[History LatestChanges].include?(self.class.name.split('::').last)
   end

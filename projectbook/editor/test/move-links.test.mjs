@@ -28,3 +28,12 @@ test('nested linked images are edited once and unchanged source is byte-exact', 
   assert.equal(rebaseMarkdown(source, 'old.md', 'new.md'), source);
   assert.equal(rebaseMarkdown(source, 'old.md', 'old.md'), source);
 });
+
+
+test('moving documents preserves callout markers and footnote prose', () => {
+  const source='> [!NOTE]\n> Read [manual](manual.md).\n\nText[^note].\n\n[^note]: Check the **oil** and [instructions](manual.md).\n';
+  const moved=rebaseMarkdown(source,'boat/page.md','archive/deep/page.md');
+  assert.ok(moved.startsWith('> [!NOTE]\n'));
+  assert.ok(moved.includes('[^note]: Check the **oil**'));
+  assert.equal((moved.match(/\.\.\/\.\.\/boat\/manual.md/g)||[]).length,2);
+});

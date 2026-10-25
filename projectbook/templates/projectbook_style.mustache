@@ -1,4 +1,12 @@
 <style>
+  .projectbook-tree-start { height:18px; line-height:18px; font-size:11px; color:transparent; border-radius:3px; }
+  .pb-dragging .projectbook-tree-start { color:#536b85; background:#e7edf5; }
+  #projectbook-tree .pb-drop-before { box-shadow: inset 0 2px #2563eb; }
+  #projectbook-tree .pb-drop-after { box-shadow: inset 0 -2px #2563eb; }
+  #projectbook-tree .pb-drop-inside, #projectbook-root-drop.pb-drop-inside { background:#dceafa; outline:2px solid #2563eb; }
+  #projectbook-tree-notice { position:fixed; bottom:12px; left:12px; width:240px; padding:10px; z-index:20; background:#edf3fa; border-radius:6px; box-shadow:0 2px 8px #24364a22; color:#536b85; font-size:12px; overflow-wrap:anywhere; }
+  #projectbook-tree-notice:empty { display:none; }
+
   :root { --projectbook-nav-width: 278px; scrollbar-gutter: stable; }
   @supports not (scrollbar-gutter: stable) { html { overflow-y: scroll; } }
   body.projectbook-tree-layout { display: grid; grid-template-columns: var(--projectbook-nav-width) minmax(0, 1fr); min-height: 100vh; grid-template-rows: auto 1fr; }
@@ -42,6 +50,8 @@
   .projectbook-topbar .projectbook-tool { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 7px; background: white; color: #45566c; border: 1px solid #ccd7e2; box-shadow: none; }
   .projectbook-tool svg { width: 16px; height: 16px; flex: 0 0 16px; fill: currentColor; }
   .projectbook-topbar .projectbook-tool:hover { background: #e7edf5; color: #143d6b; }
+  #projectbook-toolbar-tooltip { position:fixed; z-index:1000; max-width:min(280px, calc(100vw - 16px)); padding:8px 11px; border-radius:6px; background:#273549; color:white; font-size:12px; line-height:1.4; box-shadow:0 3px 12px #142a4333; pointer-events:none; }
+  #projectbook-toolbar-tooltip[hidden] { display:none; }
   .projectbook-topbar :focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
   .projectbook-breadcrumbs { display: flex; gap: 6px; font-size: 12px; line-height: 18px; margin-top: 4px; min-width: 0; white-space: nowrap; overflow-x: auto; }
   .projectbook-breadcrumbs a { color: #67778c; }

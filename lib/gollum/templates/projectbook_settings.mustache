@@ -3,6 +3,7 @@
   <p class="pb-settings-muted">For this deployment only. Settings are stored outside the book and are not synced through Git.</p>
   <nav class="pb-settings-tabs" role="tablist" aria-label="Settings sections">
     <a id="pb-semantic-tab" href="#semantic-search" role="tab" aria-selected="true" aria-controls="semantic-search">Semantic Search</a>
+    <a id="pb-navigation-tab" href="#navigation" role="tab" aria-selected="false" aria-controls="navigation">Navigation</a>
   </nav>
   <section id="semantic-search" role="tabpanel" aria-labelledby="pb-semantic-tab">
   <p id="pb-settings-connection" role="status" aria-live="polite"></p>
@@ -32,6 +33,16 @@
     <p>No changes to the saved revision or indexing configuration means no rebuild. On a change, unchanged files reuse cached text and embeddings; a new complete search index is published when ready. Removed files disappear from the new index.</p>
     <p>The first run, enabling PDF text, or a manual update may also require indexing. Opening documents and searching do not trigger a rebuild. Git synchronization and direct save/pull event triggers are planned separately.</p>
   </details>
+  </section>
+  <section id="navigation" role="tabpanel" aria-labelledby="pb-navigation-tab" hidden>
+    <h2>Tree editing</h2>
+    <form id="pb-navigation-form">
+      <label class="pb-settings-check"><input id="pb-confirm-move" type="checkbox" checked disabled> Confirm moving documents between folders</label>
+      <p class="pb-settings-muted">Reordering within a folder saves immediately. Moving is unavailable while editing a document. Manual order is stored in Git as a hidden .order file and applies only to the tree.</p>
+      <button class="btn" id="pb-navigation-save" type="submit" disabled>Save settings</button>
+      <button class="btn" id="pb-navigation-reload" type="button">Reload</button>
+      <p id="pb-navigation-message" role="status"></p>
+    </form>
   </section>
 </main>
 <style>
@@ -136,5 +147,40 @@
     finally { busy=false; reload.disabled=false; buttons(); load(false); }
   });
   index.addEventListener('click', async () => { busy=true;index.disabled=true;buttons();try { await api('/index',{});message.textContent='Index update requested.'; } catch(error) {message.textContent=error.message;} finally {busy=false;buttons();load(false);} });
+})();
+</script>
+
+<script>
+(() => {
+  const tabs = [...document.querySelectorAll('.pb-settings-tabs [role="tab"]')];
+  function select() {
+    const active = location.hash === '#navigation' ? 'navigation' : 'semantic-search';
+    tabs.forEach(tab => { const yes = tab.getAttribute('aria-controls') === active; tab.setAttribute('aria-selected', String(yes)); document.getElementById(tab.getAttribute('aria-controls')).hidden = !yes; });
+  }
+  window.addEventListener('hashchange', select); select();
+  const checkbox = document.getElementById('pb-confirm-move');
+  const save = document.getElementById('pb-navigation-save');
+  const message = document.getElementById('pb-navigation-message');
+  let state, busy = false;
+  function buttons() { checkbox.disabled = busy || !state?.editable; save.disabled = checkbox.disabled || checkbox.checked === state?.confirm_move; }
+  async function request(payload) {
+    const response = await fetch(baseUrl + '/gollum/projectbook/settings/navigation', payload ? {method:'POST',headers:{'Content-Type':'application/json','X-ProjectWiki-Request':'1'},body:JSON.stringify(payload)} : {cache:'no-store'});
+    const data = await response.json(); if (!response.ok) throw new Error(data.error || 'Settings unavailable'); return data;
+  }
+  async function load() {
+    try { state = await request(); checkbox.checked = state.confirm_move; message.textContent = state.editable ? '' : 'Deployment settings are read-only.'; }
+    catch (error) { message.textContent = error.message; }
+    buttons();
+  }
+  checkbox.addEventListener('change', buttons);
+  document.getElementById('pb-navigation-reload').addEventListener('click', load);
+  document.getElementById('pb-navigation-form').addEventListener('submit', async event => {
+    event.preventDefault(); if (busy || save.disabled) return;
+    busy = true; buttons();
+    try { state = await request({version:state.version,confirm_move:checkbox.checked}); message.textContent = 'Settings saved.'; }
+    catch (error) { message.textContent = error.message; }
+    finally { busy = false; buttons(); }
+  });
+  load();
 })();
 </script>

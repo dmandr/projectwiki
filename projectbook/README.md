@@ -355,3 +355,52 @@ Tasks live in `.projectbook/tasks/<uuid>.md`; lists in `.projectbook/task-lists/
 For an existing book, run `PROJECTBOOK_MIGRATE_TODOS=true ./projectbook/start.sh`. The opt-in migration runs before the server accepts requests, requires a clean checkout on the configured branch, validates metadata and destinations, and commits file moves plus Markdown link updates together. Repeating it is a no-op. Later launches may omit the flag. Keep one writer for the book during this maintenance step. Legacy links and historical revisions remain readable; old browser drafts with changed document versions must be reconciled through the existing conflict checks. Code examples and external links are left intact. Nonstandard HTML/wiki references are not rewritten; structured legacy TODO links are still recognized. Existing RAG generations refresh through the configured index update mechanism.
 
 To undo the migration, revert its book commit with the server stopped, then restore the corresponding application version. Do not reset or rewrite shared history.
+# Tree editing
+
+Drag an item to the upper/lower edge of a sibling row to reorder it. Drag a
+document or attachment to the middle of a folder row to move it; drop on
+**Explorer** to move it to the book root. Folder rows themselves can be reordered,
+but moving whole folders is not supported yet. Clear search before dragging.
+Tree mutations are disabled while the document editor is open.
+The strip above the first root row becomes visible during dragging: drop a root
+item there to place it first. Folder row edges reorder, while the middle third
+moves into the folder; feedback names the destination before dropping.
+
+**Settings → Navigation → Confirm moving documents between folders** controls
+the move confirmation (enabled by default). This deployment setting works without
+RAG and persists in the `app-settings` Docker volume, outside the book. Changing
+it requires `PROJECTBOOK_SETTINGS_ADMIN=true`. Stop/start and image updates keep
+the volume; removing that volume resets navigation settings.
+
+Manual order is a JSON array of immediate child names in `<folder>/.order`,
+created only after a real reorder. It is tracked in Git, hidden from navigation,
+and cannot be created using the new-document/folder UI. Order affects only the
+explorer, not the folder overview. Without `.order`, folders come first, then
+files, sorted by name. Unknown externally added children appear after ordered
+ones; UI/MCP creation appends children to an existing order in the same commit.
+
+Tree writes use the shared write lock and require the displayed Git revision and
+a clean book working tree. Each operation creates one local commit (no push).
+Moving Markdown adjusts its relative Markdown/HTML links using the same parser
+as the editor's Move action. Incoming links from other documents are not rewritten.
+Moving attachments preserves their bytes. Empty source folders are retained with
+`.gitkeep`. Canceling a confirmation and dropping in the same position write nothing.
+# Callouts and footnotes
+
+In Visual mode, place the cursor in a paragraph or select several blocks, then
+choose Note, Tip, Important, Warning or Caution in **Block type**. Note is grey;
+Tip green; Important blue; Warning amber; Caution red. Changing the type preserves
+the contents. Choosing Paragraph removes the callout wrapper. Enter in its last
+empty paragraph exits to an ordinary paragraph. Code blocks keep their existing
+separate toolbar button.
+
+Storage uses GitHub-style alerts, for example `> [!WARNING]` followed by quoted
+Markdown. Bold text, lists and links remain Markdown; each list item stays a
+separate item. Unsupported Markdown viewers fall back to ordinary quotes.
+The server renders the same callouts for reading and printing.
+
+**Insert footnote** opens a text dialog and inserts a `[^id]` reference plus a
+definition. Definitions are editable at the end of the document in Visual mode;
+the normal reader numbers the references and provides links back to the text.
+Definition blocks remain after a reference is removed, so deleting a reference
+does not silently discard the note. Markdown mode exposes the standard syntax.

@@ -9,6 +9,7 @@ services:
     ports:
       - '127.0.0.1:${PROJECTBOOK_PORT:-4000}:4567'
     volumes:
+      - app-settings:/var/lib/projectbook
       - type: bind
         source: '${PROJECTBOOK_WIKI_DIR:-../../testwiki-projectwiki}'
         target: /wiki
@@ -28,3 +29,6 @@ services:
       PROJECTBOOK_SETTINGS_ADMIN: '${PROJECTBOOK_SETTINGS_ADMIN:-false}'
       PROJECTBOOK_PUBLIC_URL: 'http://127.0.0.1:${PROJECTBOOK_PORT:-4000}'
     restart: unless-stopped
+
+volumes:
+  app-settings:

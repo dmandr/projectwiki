@@ -20,6 +20,7 @@ require 'gollum/projectbook_save'
 require 'gollum/projectbook_tasks'
 require 'gollum/projectbook_mcp'
 require 'gollum/projectbook_settings'
+require 'gollum/projectbook_tree'
 
 # Requirements for loading the layout view:
 require 'gollum/views/helpers'
@@ -246,6 +247,30 @@ module Precious
         end
       end
 
+      get '/projectbook/tree/document' do
+        content_type :json
+        wiki = wiki_new
+        page = wiki.page(params['path'])
+        entry = Gollum::ProjectbookKnowledge.new(wiki).entries.find { |e| e[:path] == params['path'] && !e[:path].split('/').any? { |part| part.start_with?('.', '_') } }
+        halt 404, {error: 'Document not found.'}.to_json unless entry
+        {content: page && page.format == :markdown ? page.text_data : nil, etag: entry[:sha], revision: wiki.commit_for(wiki.ref).id}.to_json
+      end
+
+      post '/projectbook/tree' do
+        content_type :json
+        halt 403, {error: 'Use the tree interface.'}.to_json unless request.env['HTTP_X_PROJECTWIKI_REQUEST'] == '1'
+        halt 403, {error: 'Cross-origin request rejected.'}.to_json if request.env['HTTP_ORIGIN'] && request.env['HTTP_ORIGIN'] != "#{request.scheme}://#{request.host_with_port}"
+        halt 415, {error: 'Expected JSON.'}.to_json unless request.media_type == 'application/json'
+        begin
+          input = JSON.parse(request.body.read(3 * 1024 * 1024))
+          Gollum::ProjectbookTree.apply(wiki_new, input, commit_options).to_json
+        rescue JSON::ParserError
+          halt 422, {error: 'Invalid JSON.'}.to_json
+        rescue Gollum::ProjectbookCreation::Error => e
+          halt e.status, {error: e.message}.to_json
+        end
+      end
+
       post '/projectbook/new' do
         content_type :json
         halt 403, {error: 'This request must come from the wiki interface.'}.to_json unless request.env['HTTP_X_PROJECTWIKI_REQUEST'] == '1'
@@ -262,7 +287,10 @@ module Precious
           end
           target = Gollum::ProjectbookCreation.prepare(wiki, input['kind'], input['folder'], input['name'])
           if input['kind'] == 'folder'
-            wiki.write_file(target + '/.gitkeep', '', commit_options.merge(message: "Create folder #{target}"))
+            committer = Gollum::Committer.new(wiki, commit_options.merge(message: "Create folder #{target}"))
+            Gollum::ProjectbookTree.append(wiki, committer, target)
+            wiki.write_file(target + '/.gitkeep', '', committer: committer)
+            committer.commit
             destination = '/gollum/overview/' + Gollum::NavigationIndex.encode_path(target) + '/'
           else
             destination = '/gollum/create/' + Gollum::NavigationIndex.encode_path(target)

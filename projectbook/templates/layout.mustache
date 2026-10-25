@@ -142,35 +142,38 @@
 <header class="projectbook-topbar">
   <div class="projectbook-header-main">
     <a class="projectbook-home" href="{{base_url}}/Home">ProjectBook</a>
-    <form action="{{search_path}}" method="get" role="search"><input id="projectbook-search" type="search" name="q" aria-label="Search documents" placeholder="Search documents…" title="Filter the tree by title or path. Press Enter to search document contents." autocomplete="off" value="{{query}}"><button class="btn btn-sm projectbook-tool" type="submit" title="Search document contents" aria-label="Search documents">{{#octicon}}search{{/octicon}}</button></form>
+    <form action="{{search_path}}" method="get" role="search"><input id="projectbook-search" type="search" name="q" aria-label="Search documents" placeholder="Search documents…" title="Filter the tree by title or path. Press Enter to search document contents." autocomplete="off" value="{{query}}"><button class="btn btn-sm projectbook-tool" type="submit" title="Search the contents of documents" data-tooltip="Search the contents of documents" aria-label="Search documents">{{#octicon}}search{{/octicon}}</button></form>
     <nav class="projectbook-header-actions" aria-label="Document actions">
       {{#projectbook_can_create}}
-        <button class="btn btn-sm projectbook-tool" type="button" data-create-kind="document" title="New document" aria-label="New document">{{#octicon}}file-added{{/octicon}}</button>
-        <button class="btn btn-sm projectbook-tool" type="button" data-create-kind="folder" title="New folder" aria-label="New folder"><svg aria-hidden="true" viewBox="0 0 20 20" class="projectbook-folder-plus"><path d="M2 5a1 1 0 0 1 1-1h5l2 2h7a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1Z"/><path d="M10 8v6M7 11h6"/></svg></button>
+        <button class="btn btn-sm projectbook-tool" type="button" data-create-kind="document" title="Create a new document in the selected folder" data-tooltip="Create a new document in the selected folder" aria-label="New document">{{#octicon}}file-added{{/octicon}}</button>
+        <button class="btn btn-sm projectbook-tool" type="button" data-create-kind="folder" title="Create a folder in the selected folder" data-tooltip="Create a folder in the selected folder" aria-label="New folder"><svg aria-hidden="true" viewBox="0 0 20 20" class="projectbook-folder-plus"><path d="M2 5a1 1 0 0 1 1-1h5l2 2h7a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1Z"/><path d="M10 8v6M7 11h6"/></svg></button>
       {{/projectbook_can_create}}
-      <a class="btn btn-sm projectbook-tool" href="{{projectbook_history_url}}" title="History" aria-label="History">{{#octicon}}history{{/octicon}}</a>
-      {{#projectbook_edit_url}}<a class="btn btn-sm projectbook-tool" href="{{projectbook_edit_url}}" title="Edit" aria-label="Edit">{{#octicon}}pencil{{/octicon}}</a>{{/projectbook_edit_url}}
-      {{#projectbook_printable}}<button type="button" class="btn btn-sm projectbook-tool" id="projectbook-print" title="Print" aria-label="Print"><svg aria-hidden="true" viewBox="0 0 20 20" style="fill:none;stroke:currentColor;stroke-width:1.5;stroke-linejoin:round"><path d="M5 7V2h10v5M5 14H2V7h16v7h-3M5 11h10v7H5Z"/><path d="M14 9h2"/></svg></button>{{/projectbook_printable}}
-      {{#projectbook_rename}}<button type="button" class="btn btn-sm projectbook-tool minibutton-rename-page" title="Rename" aria-label="Rename">{{#octicon}}typography{{/octicon}}</button>{{/projectbook_rename}}
-      {{#projectbook_attachment}}<a class="btn btn-sm projectbook-tool" href="{{raw_url}}" target="_blank" rel="noopener" title="Open original" aria-label="Open original">{{#octicon}}link-external{{/octicon}}</a>{{/projectbook_attachment}}
-      <a class="btn btn-sm projectbook-tool" href="{{overview_path}}" title="All files" aria-label="All files">{{#octicon}}file-directory{{/octicon}}</a>
-      <a class="btn btn-sm projectbook-tool" href="{{base_url}}/gollum/tasks" title="TODO" aria-label="TODO">{{#octicon}}checklist{{/octicon}}</a>
-      <a class="btn btn-sm projectbook-tool" id="projectbook-settings-open" href="{{base_url}}/gollum/settings" title="Settings" aria-label="Settings">{{#octicon}}gear{{/octicon}}</a>
+      <a class="btn btn-sm projectbook-tool" href="{{projectbook_history_url}}" title="{{projectbook_history_tooltip}}" data-tooltip="{{projectbook_history_tooltip}}" aria-label="History">{{#octicon}}history{{/octicon}}</a>
+      {{#projectbook_edit_url}}<a class="btn btn-sm projectbook-tool" href="{{projectbook_edit_url}}" title="Edit the current document" data-tooltip="Edit the current document" aria-label="Edit">{{#octicon}}pencil{{/octicon}}</a>{{/projectbook_edit_url}}
+      {{#projectbook_printable}}<button type="button" class="btn btn-sm projectbook-tool" id="projectbook-print" title="Print this page or save it as PDF, without navigation panels" data-tooltip="Print this page or save it as PDF, without navigation panels" aria-label="Print"><svg aria-hidden="true" viewBox="0 0 20 20" style="fill:none;stroke:currentColor;stroke-width:1.5;stroke-linejoin:round"><path d="M5 7V2h10v5M5 14H2V7h16v7h-3M5 11h10v7H5Z"/><path d="M14 9h2"/></svg></button>{{/projectbook_printable}}
+      {{#projectbook_rename}}<button type="button" class="btn btn-sm projectbook-tool minibutton-rename-page" title="Change the document title without moving the file" data-tooltip="Change the document title without moving the file" aria-label="Rename">{{#octicon}}typography{{/octicon}}</button>{{/projectbook_rename}}
+      {{#projectbook_attachment}}<a class="btn btn-sm projectbook-tool" href="{{raw_url}}" target="_blank" rel="noopener" title="Open the original attachment in a new tab" data-tooltip="Open the original attachment in a new tab" aria-label="Open original">{{#octicon}}link-external{{/octicon}}</a>{{/projectbook_attachment}}
+      <a class="btn btn-sm projectbook-tool" href="{{overview_path}}" title="Browse all documents, folders and attachments" data-tooltip="Browse all documents, folders and attachments" aria-label="All files">{{#octicon}}file-directory{{/octicon}}</a>
+      <a class="btn btn-sm projectbook-tool" href="{{base_url}}/gollum/tasks" title="Open task lists and manage tasks" data-tooltip="Open task lists and manage tasks" aria-label="TODO">{{#octicon}}checklist{{/octicon}}</a>
+      <a class="btn btn-sm projectbook-tool" id="projectbook-settings-open" href="{{base_url}}/gollum/settings" title="Configure this deployment" data-tooltip="Configure this deployment" aria-label="Settings">{{#octicon}}gear{{/octicon}}</a>
     </nav>
   </div>
   <nav class="projectbook-breadcrumbs" aria-label="Breadcrumb">{{#projectbook_breadcrumbs}}<a href="{{url}}">{{label}}</a>{{/projectbook_breadcrumbs}}</nav>
+  <div id="projectbook-toolbar-tooltip" role="tooltip" hidden></div>
   <p id="projectbook-action-notice" role="status" hidden></p>
 </header>
 <noscript><style>#projectbook-nav { visibility: visible !important; }</style></noscript>
 <aside id="projectbook-nav" aria-label="Project explorer" style="visibility:hidden">
-  <div class="projectbook-explorer-label">Explorer</div>
+  <div class="projectbook-explorer-label" id="projectbook-root-drop">Explorer</div>
   <div class="projectbook-tree-actions"><button type="button" id="projectbook-expand">Expand all</button><button type="button" id="projectbook-collapse">Collapse all</button></div>
-  <nav id="projectbook-tree" aria-label="File tree"><ul>{{{projectbook_tree_html}}}</ul></nav>
+  <p id="projectbook-tree-notice" role="status" aria-live="polite"></p>
+  <nav data-revision="{{projectbook_tree_revision}}" data-editable="{{projectbook_can_create}}" id="projectbook-tree" aria-label="File tree"><ul>{{{projectbook_tree_html}}}</ul></nav>
   <p id="projectbook-empty" hidden>No results</p>
   <a class="projectbook-overview" href="{{base_url}}/gollum/overview">All files and attachments ↗</a>
 </aside>
 {{>projectbook_create}}
 {{>projectbook_script}}
+<script type="module" src="{{base_url}}/projectbook-editor/tree.js"></script>
 {{/projectbook_tree_enabled}}
 <div class="container-lg clearfix projectbook-content">
 {{{yield}}}

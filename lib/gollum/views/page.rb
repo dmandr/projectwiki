@@ -1,3 +1,4 @@
+require 'gollum/projectbook_callouts'
 module Precious
   module Views
     class Page < Layout
@@ -39,7 +40,7 @@ module Precious
       end
 
       def content
-        content_without_page_header(@content)
+        Gollum::ProjectbookCallouts.render(content_without_page_header(@content))
       end
 
       def author

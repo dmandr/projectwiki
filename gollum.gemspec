@@ -87,6 +87,8 @@ Gem::Specification.new do |s|
     lib/gollum/projectbook_knowledge.rb
     lib/gollum/projectbook_attachments.rb
     lib/gollum/projectbook_mcp.rb
+    lib/gollum/projectbook_callouts.rb
+    lib/gollum/projectbook_tree.rb
     lib/gollum/projectbook_settings.rb
     lib/gollum/helpers.rb
     lib/gollum/locales/cn.yml

@@ -4,7 +4,7 @@ import { MDXEditor, realmPlugin, addExportVisitor$, rootEditor$, viewMode$,
   headingsPlugin, listsPlugin, quotePlugin, thematicBreakPlugin, linkPlugin, linkDialogPlugin,
   imagePlugin, tablePlugin, codeBlockPlugin, codeMirrorPlugin, frontmatterPlugin, markdownShortcutPlugin,
   diffSourcePlugin, toolbarPlugin, UndoRedo, BoldItalicUnderlineToggles,
-  BlockTypeSelect, ListsToggle, CreateLink, InsertImage, InsertTable, InsertCodeBlock, Separator } from '@mdxeditor/editor';
+  ListsToggle, CreateLink, InsertImage, InsertTable, InsertCodeBlock, Separator } from '@mdxeditor/editor';
 import { $createRangeSelection, $setSelection, $getSelection, $isRangeSelection } from 'lexical';
 import { EditorView } from '@codemirror/view';
 import { draftStore } from './drafts';
@@ -16,6 +16,8 @@ import { todoStore, TodoMessages, useTodos } from './todo-ui';
 import { todoPlugin } from './todo-editor';
 import { TodoToolbar } from './todo-toolbar';
 import { EditorToolbar } from './editor-toolbar';
+import {calloutsPlugin,CalloutBlockType} from './callouts';
+import {footnotesPlugin,InsertFootnote} from './footnotes';
 import { todoLink, pendingTodos } from './todo-format.mjs';
 import '@mdxeditor/editor/style.css';
 import './style.css';
@@ -278,7 +280,7 @@ if (document.getElementById('projectbook-editor-app')) {
       return () => form.removeEventListener('submit', save);
     });
     const plugins = React.useMemo(() => [
-      integration(), todoPlugin({store:todos,path}), headingsPlugin(), listsPlugin(), quotePlugin(), thematicBreakPlugin(), linkPlugin(), linkDialogPlugin({onClickLinkCallback: source => {
+      integration(), todoPlugin({store:todos,path}), headingsPlugin(), listsPlugin(), quotePlugin(), calloutsPlugin(), footnotesPlugin(), thematicBreakPlugin(), linkPlugin(), linkDialogPlugin({onClickLinkCallback: source => {
         const local = pending.current.find(file => file.source === source);
         const url = local?.url || new URL(source, new URL(pageUrl, location.origin)).href;
         if (/^(https?:|blob:)/.test(url)) window.open(url, '_blank', 'noopener,noreferrer');
@@ -292,8 +294,8 @@ if (document.getElementById('projectbook-editor-app')) {
       toolbarPlugin({toolbarContents: () => {
         const todoTools=<TodoToolbar store={todos} onError={setStatus} onInsert={(item,status)=>insert(todoLink(item,path,status),null,'todo')}/>;
         return <EditorToolbar sourceTools={<><span>Markdown</span>{todoTools}</>}>
-          <UndoRedo/><Separator/><BlockTypeSelect/><BoldItalicUnderlineToggles/><Separator/>
-          <span className="pb-editor-list-tools"><ListsToggle/>{todoTools}</span><CreateLink/><InsertImage/><InsertTable/><InsertCodeBlock/>
+          <UndoRedo/><Separator/><CalloutBlockType/><BoldItalicUnderlineToggles/><Separator/>
+          <span className="pb-editor-list-tools"><ListsToggle/>{todoTools}</span><CreateLink/><InsertFootnote/><InsertImage/><InsertTable/><InsertCodeBlock/>
         </EditorToolbar>;
       }})
     ], []);

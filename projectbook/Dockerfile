@@ -31,6 +31,7 @@ COPY projectbook/config.rb /experiment/config.rb
 COPY projectbook/templates /experiment/templates
 COPY projectbook/extensions /experiment/extensions
 COPY --from=editor /build/dist /experiment/editor/dist
+RUN mkdir -p /var/lib/projectbook && chown www-data:www-data /var/lib/projectbook
 USER www-data
 WORKDIR /wiki
 HEALTHCHECK --interval=30s --timeout=25s --start-period=30s --retries=3 \
