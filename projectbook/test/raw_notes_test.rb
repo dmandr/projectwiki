@@ -57,6 +57,33 @@ class RawNotesTest < Minitest::Test
     assert_equal 'Размер: 23 mm — reference',items.first['excerpt']
     refute_includes items.first['excerpt'],'photo-01'
   end
+  def test_append_messages_preserves_content_attachments_and_retry
+    note=service.create(wiki,{'id'=>ID,'text'=>'First message'},{})
+    input={'id'=>ID,'message_id'=>'44444444-4444-4444-8444-444444444444','expected_version'=>note['document_version'],'text'=>'Second message','attachments'=>[upload]}
+    before=head;result=service.append(wiki,input)
+    assert_equal before,wiki.commit_for('main').parent.id
+    body=wiki.page(result['path']).text_data
+    assert body.index('First message')<body.index('Second message')
+    assert_equal 1,result['attachments'].length
+    assert_includes body,result['attachments'][0]['name']
+    before=head;assert service.append(wiki,input)['unchanged'];assert_equal before,head
+    assert_raises(service::Error){service.append(wiki,input.merge('text'=>'Different'))}
+    error=assert_raises(service::Error){service.append(wiki,input.merge('message_id'=>'55555555-5555-4555-8555-555555555555'))}
+    assert_equal 412,error.status;assert_equal before,head
+    third=service.append(wiki,{'id'=>ID,'message_id'=>'66666666-6666-4666-8666-666666666666','expected_version'=>result['document_version'],'text'=>'Third message'})
+    assert_includes wiki.page(third['path']).text_data,'Second message'
+    assert_includes wiki.page(third['path']).text_data,'Third message'
+    assert_equal 1,third['attachments'].length
+  end
+  def test_upload_storage_error_is_actionable
+    before=head
+    error=File.stub(:open,proc{raise Errno::ENOSPC}) do
+      assert_raises(service::Error){upload}
+    end
+    assert_equal 507,error.status
+    assert_includes error.message,'Server storage is full'
+    assert_equal before,head
+  end
   def test_chunks_checksums_and_validation_never_partial_commit
     service.upload(wiki,upload_id:UP,offset:0,data:Base64.strict_encode64('abc'))
     assert_equal 3,service.upload(wiki,upload_id:UP,offset:0,data:Base64.strict_encode64('abc'))[:next_offset]

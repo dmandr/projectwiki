@@ -429,7 +429,12 @@ and hidden `.note.json`. One local Git commit contains the complete note.
 Unsorted/Processed is metadata, not a directory move. The ordinary editor can
 edit the saved Markdown. Inbox: `/gollum/raw-notes`.
 
-Capture shows newest attachments first, with the add controls below the media.
+A raw note is a one-way conversation. Send creates the first note; subsequent
+messages append to the same Markdown file in chronological order. Reopening the
+note shows its saved content and the composer underneath. Each message is one
+commit, with version checks and a stable request UUID for retries. New content
+returns a processed note to Unsorted. Drafts are stored separately for each note.
+Attachments retain selection order, with add controls below the media.
 Separate Take photo, Photo library, Record voice and Audio file controls avoid a
 mixed image/audio picker. iOS still owns its native picker choices. The inbox is
 a newest-first feed with text excerpts, up to four image previews and audio players.
@@ -449,7 +454,7 @@ all files. Reusing the same note UUID and payload returns the existing note.
 Metadata edits use expected_version, document edits use the document blob SHA.
 
 MCP: `upload_raw_note_attachment`, `create_raw_note`, `list_raw_notes`,
-`read_raw_note`, `set_raw_note_status`. `create_raw_note.files` advertises
+`read_raw_note`, `append_raw_note`, `set_raw_note_status`. `create_raw_note.files` and `append_raw_note.files` advertise
 `openai/fileParams` for ChatGPT file objects; public HTTPS downloads are bounded
 and private addresses/redirects rejected. Other clients can upload byte chunks.
 No implicit access to chat attachments: the client must supply file objects or
@@ -492,3 +497,9 @@ plist. Deleting containers does not delete the book.
 ### Folder pages
 
 A folder can have editable Markdown content in `.index.md`. Its H1 supplies the tree label; the file is not shown as a separate node. New folders start with a dynamic `[Pages](#projectbook-pages)` block that can be removed without deleting children. Moving the overview moves its whole folder. Deleting it requires an unavoidable confirmation for the entire subtree. See [folder-page behavior](FOLDER_PAGES.md) and [verification](VERIFICATION.md).
+
+ChatGPT authentication is a separate integration step: the existing `/mcp`
+endpoint uses a static Bearer token behind Cloudflare Access. An Access browser
+login does not authenticate ChatGPT server-to-server requests. Authenticated
+ChatGPT plugins require a compatible OAuth flow; do not remove Access or expose
+write tools anonymously to work around this. See https://developers.openai.com/plugins/build/auth.

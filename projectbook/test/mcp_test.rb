@@ -113,7 +113,7 @@ class ProjectbookMCPTest < Minitest::Test
     ENV.delete('PROJECTBOOK_MCP_DOCUMENT_WRITE')
     Precious::App.set :wiki_options, {ref: 'main', allow_editing: false}
     list = JSON.parse(rpc('tools/list').body).dig('result', 'tools')
-    refute list.any? { |t| %w[save_document edit_document save_todos save_agent_note].include?(t['name']) }
+    refute list.any? { |t| %w[save_document edit_document save_todos save_agent_note append_raw_note].include?(t['name']) }
   end
   def test_configured_public_host_preserves_origin_guard
     previous = ENV['PROJECTBOOK_PUBLIC_URL']
@@ -129,7 +129,7 @@ class ProjectbookMCPTest < Minitest::Test
     assert_equal 200, response.status, response.body
     assert_equal 'projectbook', JSON.parse(response.body).dig('result', 'serverInfo', 'name')
     result = JSON.parse(rpc('tools/list').body).fetch('result')
-    assert_equal 22, result.fetch('tools').length
+    assert_equal 23, result.fetch('tools').length
     assert result['tools'].any? { |t| t['name'] == 'save_document' }
     response = rpc('resources/read', {uri: 'projectbook://book/context'})
     result = JSON.parse(response.body)

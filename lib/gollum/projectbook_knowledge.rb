@@ -296,6 +296,14 @@ module Gollum
       result = ProjectbookRawNotes.create(@wiki,input,{name:'ProjectBook agent',email:'agent@projectbook.local'})
       result.merge('url'=>url(result['path']))
     end
+    def append_raw_note(id:, message_id:, expected_version:, text: '', attachments: [], files: [])
+      document_write_allowed!
+      raise Error,'At most 20 attachments per message.' if files.length+attachments.length>20
+      input={'id'=>id,'message_id'=>message_id,'expected_version'=>expected_version,'text'=>text,'attachments'=>attachments.map{|f|f.transform_keys(&:to_s)}}
+      input['attachments']+=files.map{|f|ProjectbookRawNotes.download(@wiki,f.transform_keys(&:to_s))}
+      result=ProjectbookRawNotes.append(@wiki,input,{name:'ProjectBook agent',email:'agent@projectbook.local'})
+      result.merge('url'=>url(result['path']))
+    end
     def set_raw_note_status(id:, expected_version:, status:, results: [])
       document_write_allowed!
       ProjectbookRawNotes.status(@wiki,id:id,expected_version:expected_version,status:status,results:results,options:{name:'ProjectBook agent',email:'agent@projectbook.local'})

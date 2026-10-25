@@ -6,10 +6,10 @@ const base=window.baseUrl||'';
 const endpoint=base+'/gollum/projectbook/raw-notes';
 async function api(action,body){
  const response=await fetch(endpoint+(action?'/'+action:''),body?{method:'POST',headers:{'Content-Type':'application/json','X-ProjectWiki-Request':'1'},body:JSON.stringify(body)}:{cache:'no-store'});
- const data=await response.json();if(!response.ok)throw Error(data.error||'Request failed');return data;
+ let data;try{data=await response.json();}catch{throw Error('Server request failed (HTTP '+response.status+'). Retry after the server is available.');}if(!response.ok)throw Error(data.error||'Request failed');return data;
 }
 const makeDraft=()=>({id:crypto.randomUUID(),title:'',text:'',files:[]});
-const key=base+':raw-note';
+
 const bytes64=bytes=>{let result='';for(let i=0;i<bytes.length;i++)result+=String.fromCharCode(bytes[i]);return btoa(result);};
 function Media({item}){
  const [url,setURL]=useState('');useEffect(()=>{const value=URL.createObjectURL(item.blob);setURL(value);return()=>URL.revokeObjectURL(value);},[item.blob]);
@@ -27,13 +27,16 @@ async function photo(file,original){
  }catch{return {blob:file,name:file.name,mime_type:file.type||(/\.heic$/i.test(file.name)?'image/heic':''),warning:'Could not resize; keeping the original.'};}
  finally{URL.revokeObjectURL(url);}
 }
-function Capture(){
+function Capture({noteId=''}){
+ const key=base+':raw-note'+(noteId?':'+noteId:'');
+ const [note,setNote]=useState(null),[loadError,setLoadError]=useState('');
+ useEffect(()=>{if(noteId)api(noteId).then(setNote).catch(e=>setLoadError(e.message));},[noteId]);
  const [draft,setDraft]=useState(makeDraft),[ready,setReady]=useState(false),[notice,setNotice]=useState(''),[busy,setBusy]=useState(false),[recording,setRecording]=useState(false),[original,setOriginal]=useState(false),[local,setLocal]=useState('');
  const recorder=useRef(),stream=useRef(),saveQueue=useRef(Promise.resolve()),saved=useRef(false),latest=useRef(draft);latest.current=draft;
  useEffect(()=>{draftStore('get',key).then(d=>{if(d){setDraft(d);setNotice('Restored your local draft.');}}).catch(()=>setLocal('Browser draft storage is unavailable. Keep this tab open.')).finally(()=>setReady(true));return()=>{if(recorder.current?.state==='recording')recorder.current.stop();stream.current?.getTracks().forEach(t=>t.stop());};},[]);
- useEffect(()=>{if(!ready||saved.current)return;saveQueue.current=saveQueue.current.catch(()=>{}).then(()=>draftStore('put',key,draft)).then(()=>setLocal('Draft saved on this device · not yet in the book')).catch(()=>setLocal('Draft could not be stored. Keep this tab open.'));},[draft,ready]);
+ useEffect(()=>{if(!ready||saved.current)return;saveQueue.current=saveQueue.current.catch(()=>{}).then(()=>draftStore('put',key,draft)).then(()=>setLocal('Unsent message saved on this device')).catch(()=>setLocal('Draft could not be stored. Keep this tab open.'));},[draft,ready]);
  useEffect(()=>{const warn=e=>{if(!saved.current&&(latest.current.text||latest.current.files.length||recorder.current?.state==='recording')){e.preventDefault();e.returnValue='';}};window.addEventListener('beforeunload',warn);return()=>window.removeEventListener('beforeunload',warn);},[]);
- function append(item){if(item.blob.size>20*1024*1024){setNotice('File exceeds 20 MiB. Choose a smaller file.');return;}setDraft(d=>({...d,files:[{...item,upload_id:crypto.randomUUID()},...d.files]}));}
+ function append(item){if(item.blob.size>20*1024*1024){setNotice('File exceeds 20 MiB. Choose a smaller file.');return;}setDraft(d=>({...d,files:[...d.files,{...item,upload_id:crypto.randomUUID()}]}));}
  async function addFiles(event){const files=[...event.target.files];event.target.value='';setBusy(true);setNotice('Preparing attachments…');try{for(const file of files){const audioTypes={m4a:'audio/mp4',mp3:'audio/mpeg',wav:'audio/wav',ogg:'audio/ogg',webm:'audio/webm'};const type=file.type||audioTypes[file.name.split('.').pop().toLowerCase()]||'';if(!/^(image|audio)\//.test(type)&&!(/\.heic$/i.test(file.name)))throw Error('Only photos and audio are supported.');append(await photo(type!==file.type?new File([file],file.name,{type}):file,original));}setNotice('');}catch(e){setNotice(e.message);}finally{setBusy(false);}}
  async function record(){
  if(recording){recorder.current.stop();return;}
@@ -57,17 +60,19 @@ function Capture(){
    for(let offset=0;offset<bytes.length;offset+=262144){setNotice(`Uploading ${n+1}/${draft.files.length} · ${Math.round(offset/bytes.length*100)}%`);let error;for(let attempt=0;attempt<3;attempt++){try{await api('upload',{upload_id:f.upload_id,offset,data:bytes64(bytes.slice(offset,offset+262144))});error=null;break;}catch(e){error=e;}}if(error)throw error;}
    attachments.push({upload_id:f.upload_id,name:f.name,mime_type:f.mime_type,sha256});
   }
-  setNotice('Saving note and attachments to the book…');const result=await api('create',{id:draft.id,title:draft.title,text:draft.text,attachments});saved.current=true;await saveQueue.current;await draftStore('delete',key);location.href=result.url;
+  setNotice('Saving note and attachments to the book…');const result=noteId?await api('append',{id:noteId,message_id:draft.id,expected_version:note.document_version,text:draft.text,attachments}):await api('create',{id:draft.id,title:draft.title,text:draft.text,attachments});saved.current=true;await saveQueue.current;await draftStore('delete',key);if(noteId){location.hash='raw-note-compose';location.reload();}else location.href=result.url+'#raw-note-compose';
  }catch(e){setNotice(e.message+' Your draft is kept; you can retry.');}finally{setBusy(false);}}
- if(!ready)return <p>Restoring draft…</p>;
- return <section className="raw-capture">
-  <div className="raw-heading"><h1>New raw note</h1><a href={base+'/gollum/raw-notes'}>Raw Notes</a></div>
-  <p>Capture now. Organize later. New attachments appear first.</p>
+ useEffect(()=>{if(ready&&(!noteId||note)&&location.hash==='#raw-note-compose')document.getElementById('raw-note-compose')?.scrollIntoView({block:'end'});},[ready,note]);
+ if(loadError)return <p role="alert">{loadError}</p>;
+ if(!ready||(noteId&&!note))return <p>Restoring draft…</p>;
+ if(noteId&&!note.editable)return null;
+ return <section className={"raw-capture raw-chat-compose"+(noteId?'':' raw-chat-new')} id="raw-note-compose">
+  <div className="raw-heading">{!noteId&&<h1>New raw note</h1>}<a href={base+'/gollum/raw-notes'}>Raw Notes</a></div>
+  {!noteId&&<p>Send text, photos or voice. Continue this note whenever you return.</p>}
   <fieldset disabled={busy}>
-   <label>Title <span>(optional)</span><input value={draft.title} maxLength={200} placeholder="Date and time if left blank" onChange={e=>setDraft({...draft,title:e.target.value})}/></label>
-   <label>Text<textarea rows={4} value={draft.text} placeholder="Comments, measurements, observations…" onChange={e=>setDraft({...draft,text:e.target.value})}/></label>
-   <div className="raw-media" aria-label="Note attachments, newest first">{draft.files.map(f=><figure key={f.upload_id}><Media item={f}/><figcaption>{f.name} · {(f.blob.size/1024).toFixed(0)} KiB {f.warning&&<span>{f.warning}</span>}</figcaption><button type="button" className="btn" aria-label={'Remove '+f.name} onClick={()=>setDraft(d=>({...d,files:d.files.filter(a=>a.upload_id!==f.upload_id)}))}>Remove</button></figure>)}</div>
-   <div className="raw-add"><h2>Add to this note</h2>
+   {!noteId&&<label>Title <span>(optional)</span><input value={draft.title} maxLength={200} placeholder="Date and time if left blank" onChange={e=>setDraft({...draft,title:e.target.value})}/></label>}
+   <div className="raw-media" aria-label="Attachments for the next message">{draft.files.map(f=><figure key={f.upload_id}><Media item={f}/><figcaption>{f.name} · {(f.blob.size/1024).toFixed(0)} KiB {f.warning&&<span>{f.warning}</span>}</figcaption><button type="button" className="btn" aria-label={'Remove '+f.name} onClick={()=>setDraft(d=>({...d,files:d.files.filter(a=>a.upload_id!==f.upload_id)}))}>Remove</button></figure>)}</div>
+   <div className="raw-add"><label>Text<textarea rows={4} value={draft.text} placeholder="Comments, measurements, observations…" onChange={e=>setDraft({...draft,text:e.target.value})}/></label><h2>Add to your message</h2>
     <div className="raw-tools">
      <button type="button" className="btn" aria-pressed={recording} onClick={record}>{recording?'■ Stop recording':'● Record voice'}</button>
      <label className="btn">Take photo<input aria-label="Take photo" type="file" accept="image/*" capture="environment" onChange={addFiles}/></label>
@@ -77,7 +82,7 @@ function Capture(){
     <label className="raw-original"><input type="checkbox" checked={original} onChange={e=>setOriginal(e.target.checked)}/> Keep original photos (otherwise resize to 2048 px)</label>
     <p className="raw-hint">Photos and audio only. Your device provides the file picker; video is not supported yet.</p>
    </div>
-   <button type="button" className="btn btn-primary raw-save" disabled={recording||(!draft.text.trim()&&!draft.files.length)} onClick={save}>Save to Unsorted</button>
+   <button type="button" className="btn btn-primary raw-save" disabled={recording||(!draft.text.trim()&&!draft.files.length)} onClick={save}>{busy?'Sending…':'Send'}</button>
   </fieldset><p className="raw-local">{local}</p><p role="status" aria-live="polite">{notice}</p>
  </section>;
 }
@@ -105,4 +110,6 @@ function Inbox(){
 }
 const mount=document.getElementById('projectbook-raw-notes');if(mount)createRoot(mount).render(location.pathname.endsWith('/new')?<Capture/>:<Inbox/>);
 // Keep ordinary Markdown download links; add a native player beside audio links.
-if(location.pathname.includes('/raw-notes/'))document.querySelectorAll('.markdown-body a').forEach(link=>{const url=new URL(link.href,location.href);if(url.origin===location.origin&&/\/media\/voice-\d+\.(m4a|mp3|webm|ogg|wav)$/.test(url.pathname)){const audio=document.createElement('audio');audio.controls=true;audio.preload='metadata';audio.src=base+'/'+url.pathname.replace(/^.*?(raw-notes\/)/,'$1');link.after(audio);}});
+const noteMatch=location.pathname.slice(base.length).match(/^\/raw-notes\/\d{4}-\d{2}-\d{2}-([0-9a-f-]{36})\/note(?:\.md)?$/);
+if(noteMatch){const content=document.querySelector('#wiki-content')||document.querySelector('.markdown-body')?.parentElement;if(content){const composer=document.createElement('div');content.append(composer);createRoot(composer).render(<Capture noteId={noteMatch[1]}/>);document.body.classList.add('raw-note-chat');}}
+if(location.pathname.includes('/raw-notes/'))document.querySelectorAll('.markdown-body a').forEach(link=>{const url=new URL(link.href,location.href);if(url.origin===location.origin&&/\/media\/voice-[0-9a-f-]+\.(m4a|mp3|webm|ogg|wav)$/.test(url.pathname)){const audio=document.createElement('audio');audio.controls=true;audio.preload='metadata';audio.src=base+'/'+url.pathname.replace(/^.*?(raw-notes\/)/,'$1');link.after(audio);}});

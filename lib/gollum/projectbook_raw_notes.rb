@@ -36,6 +36,7 @@ module Gollum
       root = stage(wiki)
       raise Error, 'Upload staging is full. Retry after old drafts expire.' if Dir.glob(root+'/*').sum { |f| ::File.size(f) } + bytes.bytesize > 250 * 1024 * 1024
       path = ::File.join(root,upload_id)
+      original_size=::File.exist?(path) ? ::File.size(path) : 0
       ::File.open(path, ::File.exist?(path) ? 'r+b' : 'w+b', 0600) do |file|
         raise Error.new('Upload offset mismatch.',409) if offset > file.size
         file.seek(offset)
@@ -44,8 +45,12 @@ module Gollum
         else
           file.write(bytes)
         end
+        file.flush
         {upload_id: upload_id, next_offset: offset + bytes.bytesize}
       end
+    rescue Errno::ENOSPC, Errno::EDQUOT
+      ::File.truncate(path,original_size) if path && original_size && ::File.file?(path)
+      raise Error.new('Server storage is full. Free disk space and retry; your message is kept on this device.',507)
     end
     # Resolve and pin the connection address, including every redirect. Never
     # fetch private infrastructure through an agent-supplied attachment URL.
@@ -92,6 +97,25 @@ module Gollum
         meta.merge('path'=>path,'url'=>snapshot.url(path),'version'=>entry[:sha], 'document_version'=>doc[:sha], 'title'=>ProjectbookTitles.title(snapshot.text(doc),path), 'excerpt'=>snapshot.text(doc).sub(/\A# [^\n]*\n/, '').gsub(/!?\[([^\]]*)\]\([^)]*\)/) { $1.start_with?('photo-', 'voice-') ? '' : $1 }.gsub(/\s+/, ' ').strip[0,280])
       end.sort_by { |item| Time.iso8601(item['created_at']) }.reverse
     end
+    def self.prepare_attachments(wiki,files,folder,prefix='')
+      prepared = []; total = 0
+      files.each_with_index do |file,i|
+        mime = file.fetch('mime_type','').split(';').first
+        ext = TYPES[mime]
+        raise Error, 'Only photos and audio are supported; video is deferred.' unless ext
+        id!(file['upload_id'])
+        path = ::File.join(stage(wiki),file['upload_id'])
+        raise Error, 'Attachment upload expired. Upload it again.' unless ::File.file?(path)
+        bytes = ::File.binread(path,MAX_FILE+1)
+        raise Error, 'Attachment must be 1 byte..20 MiB.' unless (1..MAX_FILE).cover?(bytes.bytesize)
+        raise Error, 'Attachment checksum mismatch.' unless file['sha256'] == Digest::SHA256.hexdigest(bytes)
+        total += bytes.bytesize
+        raise Error, 'Note exceeds 50 MiB.' if total > MAX_TOTAL
+        name = "#{mime.start_with?('image/') ? 'photo' : 'voice'}-#{prefix+format('%02d',i+1)}.#{ext}"
+        prepared << [folder+'/media/'+name, bytes, mime, name]
+      end
+      prepared
+    end
     def self.create(wiki, input, options)
       raise Error.new('Editing is disabled.',403) unless wiki.allow_editing
       id = id!(input['id'])
@@ -111,22 +135,7 @@ module Gollum
       now = Time.now.utc
       title = "Raw note #{now.strftime('%Y-%m-%d %H:%M')}" if title.empty?
       folder = "raw-notes/#{now.strftime('%Y-%m-%d')}-#{id}"
-      prepared = []; total = 0
-      files.each_with_index do |file,i|
-        mime = file.fetch('mime_type','').split(';').first
-        ext = TYPES[mime]
-        raise Error, 'Only photos and audio are supported; video is deferred.' unless ext
-        id!(file['upload_id'])
-        path = ::File.join(stage(wiki),file['upload_id'])
-        raise Error, 'Attachment upload expired. Upload it again.' unless ::File.file?(path)
-        bytes = ::File.binread(path,MAX_FILE+1)
-        raise Error, 'Attachment must be 1 byte..20 MiB.' unless (1..MAX_FILE).cover?(bytes.bytesize)
-        raise Error, 'Attachment checksum mismatch.' unless file['sha256'] == Digest::SHA256.hexdigest(bytes)
-        total += bytes.bytesize
-        raise Error, 'Note exceeds 50 MiB.' if total > MAX_TOTAL
-        name = "#{mime.start_with?('image/') ? 'photo' : 'voice'}-#{format('%02d',i+1)}.#{ext}"
-        prepared << [folder+'/media/'+name, bytes, mime, name]
-      end
+      prepared = prepare_attachments(wiki,files,folder)
       body = ProjectbookTitles.markdown_heading(title)+"\n"+text+"\n"
       prepared.each do |_,_,mime,name|
         body += "\n#{mime.start_with?('image/') ? '!' : ''}[#{name}](media/#{name})\n"
@@ -142,6 +151,46 @@ module Gollum
       commit = committer.commit
       files.each { |file| FileUtils.rm_f(::File.join(stage(wiki),file['upload_id'])) }
       catalog(ProjectbookKnowledge.new(wiki)).find { |item| item['id'] == id }.merge('commit'=>commit)
+    end
+    def self.append(wiki,input,options={})
+      raise Error.new('Editing is disabled.',403) unless wiki.allow_editing
+      id=id!(input['id']);message_id=id!(input['message_id'])
+      text=input.fetch('text','');files=input.fetch('attachments',[])
+      raise Error,'Text must be at most 100000 characters.' unless text.is_a?(String) && text.length <= 100000
+      raise Error,'At most 20 attachments per message.' unless files.is_a?(Array) && files.length <= 20
+      raise Error,'Add text or an attachment.' if text.strip.empty? && files.empty?
+      fingerprint=Digest::SHA256.hexdigest(JSON.generate([text,files.map{|f|f.slice('name','mime_type','sha256')}]))
+      snapshot=ProjectbookKnowledge.new(wiki)
+      note=catalog(snapshot).find{|n|n['id']==id}
+      raise Error.new('Note not found.',404) unless note
+      metadata_path=note['path'].sub('note.md','.note.json')
+      metadata_entry=snapshot.entries.find{|e|e[:path]==metadata_path}
+      previous_metadata=snapshot.text(metadata_entry);meta=JSON.parse(previous_metadata)
+      previous_message=meta.fetch('messages',[]).find{|m|m['id']==message_id}
+      if previous_message
+        raise Error.new('Message ID already used with different content.',409) unless previous_message['fingerprint']==fingerprint
+        return note.merge('unchanged'=>true)
+      end
+      raise Error.new('The note changed. Reload it before sending; your draft is kept.',412) unless input['expected_version']==note['document_version']
+      entry=snapshot.entries.find{|e|e[:path]==note['path']};previous=snapshot.text(entry)
+      prepared=prepare_attachments(wiki,files,::File.dirname(note['path']),message_id+'-')
+      body=previous.rstrip+"\n\n---\n\n"+text+"\n"
+      prepared.each{|_,_,mime,name|body+="\n#{mime.start_with?('image/') ? '!' : ''}[#{name}](media/#{name})\n"}
+      raise Error,'Note exceeds 2 MiB; start another note.' if body.bytesize>2*1024*1024
+      meta['attachments']+=prepared.map{|path,bytes,mime,name|{'path'=>path,'name'=>name,'mime_type'=>mime,'bytes'=>bytes.bytesize}}
+      meta['status']='unsorted'
+      meta['messages']||=[];meta['messages']<<{'id'=>message_id,'fingerprint'=>fingerprint,'created_at'=>Time.now.utc.iso8601(6)}
+      ProjectbookSave.disk_check!(wiki,note['path'],previous)
+      ProjectbookSave.disk_check!(wiki,metadata_path,previous_metadata)
+      prepared.each{|path,*_|ProjectbookSave.disk_check!(wiki,path)}
+      committer=Gollum::Committer.new(wiki,options.merge(message:'Append raw note message'))
+      [[note['path'],body],[metadata_path,JSON.pretty_generate(meta)+"\n"]].each do |path,content|
+        committer.add(path,content);committer.after_commit{|index,_|index.update_working_dir(path)}
+      end
+      prepared.each{|path,bytes,*_|wiki.write_file(path,bytes,committer:committer,normalize:false)}
+      commit=committer.commit
+      files.each{|f|FileUtils.rm_f(::File.join(stage(wiki),f['upload_id']))}
+      catalog(ProjectbookKnowledge.new(Gollum::Wiki.new(wiki.path,ref:wiki.ref))).find{|n|n['id']==id}.merge('commit'=>commit)
     end
     def self.status(wiki, id:, expected_version:, status:, results: [], options: {})
       raise Error.new('Editing is disabled.',403) unless wiki.allow_editing

@@ -193,6 +193,13 @@ module Precious
         cache_control :no_store
         {items: Gollum::ProjectbookRawNotes.catalog(Gollum::ProjectbookKnowledge.new(wiki_new)), editable: @allow_editing}.to_json
       end
+      get '/projectbook/raw-notes/:id' do
+        content_type :json
+        cache_control :no_store
+        note=Gollum::ProjectbookRawNotes.catalog(Gollum::ProjectbookKnowledge.new(wiki_new)).find{|n|n['id']==params[:id]}
+        halt 404, {error:'Note not found.'}.to_json unless note
+        note.merge(editable:@allow_editing).to_json
+      end
       post '/projectbook/raw-notes/:action' do
         content_type :json
         halt 403, {error: 'Use the wiki interface.'}.to_json unless request.env['HTTP_X_PROJECTWIKI_REQUEST'] == '1'
@@ -204,6 +211,7 @@ module Precious
           result = case params[:action]
           when 'upload' then service.upload(wiki_new, **input.transform_keys(&:to_sym))
           when 'create' then service.create(wiki_new, input, commit_options)
+          when 'append' then service.append(wiki_new,input,commit_options)
           when 'status' then service.status(wiki_new, **input.transform_keys(&:to_sym), options: commit_options)
           else halt 404
           end
