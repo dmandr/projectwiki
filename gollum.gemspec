@@ -71,6 +71,9 @@ Gem::Specification.new do |s|
     lib/gollum.rb
     lib/gollum/projectbook_titles.rb
     lib/gollum/views/missing.rb
+    lib/gollum/views/settings.rb
+    lib/gollum/templates/settings.mustache
+    lib/gollum/templates/projectbook_settings.mustache
     lib/gollum/templates/missing.mustache
     lib/gollum/app.rb
     lib/gollum/assets.rb

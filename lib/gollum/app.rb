@@ -26,6 +26,7 @@ require 'gollum/views/helpers/locale_helpers'
 require 'gollum/views/template_cascade'
 
 require 'gollum/views/layout'
+require 'gollum/views/settings'
 require 'gollum/views/missing'
 require 'gollum/views/attachment'
 require 'gollum/views/editable'
@@ -172,6 +173,11 @@ module Precious
     end
 
     namespace '/gollum' do
+      get '/settings' do
+        cache_control :no_store
+        mustache :settings
+      end
+
       post '/projectbook/save' do
         content_type :json
         halt 403, {error: 'This request must come from the wiki interface.'}.to_json unless request.env['HTTP_X_PROJECTWIKI_REQUEST'] == '1'

@@ -281,3 +281,10 @@ export PROJECTBOOK_SETTINGS_ADMIN=true
 `PROJECTBOOK_RAG_ENABLED` is an initial default; subsequent values are persisted by Settings. Run `./projectbook/start.sh`. Primary Web UI remains `http://127.0.0.1:4000/Home`, MCP remains `http://127.0.0.1:4000/mcp`, and write tools remain enabled. Each deployment has separate model/index/settings volumes. To keep RAG installed but disable search/indexing use Settings. To remove sidecars entirely, set `PROJECTBOOK_RAG_AVAILABLE=false` and rerun start; volumes and book remain intact. PDF reading remains available in either case.
 
 Existing MCP clients must refresh tool discovery/reconnect to see `search_knowledge`, `get_search_index_status`, `read_pdf_text`, and `read_attachment`. No URL change is needed for a client already using port 4000. Agent guidance distinguishes semantic/hybrid retrieval from literal Markdown search and directs the agent to verify PDF search excerpts against source pages.
+
+
+### Settings page
+
+Use the header gear icon or open `http://127.0.0.1:4000/gollum/settings`. Settings now has its own page; Semantic Search is the first tab. The status card reports model/index state. Save is available only when values differ from the saved configuration; unsaved changes are indicated and guarded when leaving. Reload asks before discarding changed values. Settings remain per deployment, outside the book, with server-side version checks.
+
+“Update automatically after saved changes” checks the local Git revision at the configured interval. It notices browser/MCP commits and externally pulled commits; it does not perform Git pull. Unchanged files reuse cached embeddings, while each changed snapshot currently builds a complete replacement Qdrant collection. “How index updates work” explains this distinction. Git pull integration and direct commit/pull event triggers remain planned.

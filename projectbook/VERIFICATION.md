@@ -185,3 +185,11 @@
 
 - Default primary port changed to 4000 in Compose, launch configuration, examples, README and AGENTS.md. The ignored local settings and existing Codex `projectbook` MCP URL were updated accordingly. Existing parallel experiment 4570 is unchanged.
 - Recreated only the primary wiki container with the new port/public URL, retaining book and RAG volumes. Verified Web UI HTTP 200, all 15 MCP tools (including PDF and writes), and RAG state ready. No commit or push.
+
+
+## Dedicated Settings page — 2026-10-25
+
+- Approved primary semantic search/PDF MCP and port convention committed as `c167dd84`, without push. User explicitly authorized implementing, testing and committing this Settings stage too, without push.
+- Header gear is now a normal link to `/gollum/settings`; modal markup/script is removed from document pages. Dedicated view/template shares the book layout and offers a Semantic Search tab, status card, return link and indexing explanation. Existing JSON settings endpoints/permissions/version checks remain unchanged.
+- Rebuilt and deployed at port 4000; API regression tests: 3 tests / 13 assertions passed. Live page and JSON endpoint return 200, default interval remains 60, index ready. Browser: gear opens the page, interval 60→61 saves and survives reload, restored 60 saves; returning a draft to its saved value disables Save and clears the dirty indicator. Leaving with a changed draft remained on Settings; after reverting, Back to book navigated normally. Direct page reload and navigation back from Home work. Added beforeunload guard and discard confirmation for Reload.
+- Settings edits do not modify book documents or Git commits. Git pull is explicitly recorded as not implemented. Full task IDs/metadata/list remain planned; only standard Markdown checklists exist in the editor.

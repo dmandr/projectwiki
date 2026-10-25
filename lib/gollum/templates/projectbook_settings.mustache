@@ -1,16 +1,22 @@
-<dialog id="projectbook-settings-dialog" aria-labelledby="projectbook-settings-title">
-  <div class="pb-settings-heading"><h2 id="projectbook-settings-title">Settings</h2><button type="button" class="btn btn-sm" id="pb-settings-close" aria-label="Close settings">Close</button></div>
+<main id="wiki-wrapper" class="pb-settings-page" aria-labelledby="projectbook-settings-title">
+  <div class="pb-settings-heading"><h1 id="projectbook-settings-title">Settings</h1><a class="btn btn-sm" href="{{base_url}}/Home">Back to book</a></div>
   <p class="pb-settings-muted">For this deployment only. Settings are stored outside the book and are not synced through Git.</p>
-  <p id="pb-settings-message" role="status"></p>
+  <nav class="pb-settings-tabs" role="tablist" aria-label="Settings sections">
+    <a id="pb-semantic-tab" href="#semantic-search" role="tab" aria-selected="true" aria-controls="semantic-search">Semantic Search</a>
+  </nav>
+  <section id="semantic-search" role="tabpanel" aria-labelledby="pb-semantic-tab">
+  <p id="pb-settings-message" role="status" aria-live="polite"></p>
+  <div class="pb-settings-columns">
   <form id="pb-settings-form">
     <fieldset id="pb-settings-fields" disabled>
       <legend>Semantic search <small>Experimental</small></legend>
       <label class="pb-settings-check"><input type="checkbox" name="enabled"> Enable semantic search</label>
       <p class="pb-settings-muted">First use downloads a local model (about 241 MB). Disabling stops new searches and indexing at a safe boundary; cached files are kept. A download or PDF already in progress may finish first.</p>
-      <label class="pb-settings-check"><input type="checkbox" name="auto_index"> Automatically update the index</label>
+      <label class="pb-settings-check"><input type="checkbox" name="auto_index"> Update automatically after saved changes</label>
+      <p class="pb-settings-muted">Checks the local Git revision at the interval below. Saved edits and changes received by Git pull are picked up automatically; unsaved drafts are excluded. This does not run Git pull.</p>
       <label class="pb-settings-check"><input type="checkbox" name="include_pdf"> Include PDF text (no OCR)</label>
       <div class="pb-settings-grid">
-        <label>Check for changes every (seconds)<input type="number" name="poll_seconds" min="30" max="86400" required></label>
+        <label>Check local Git every (seconds)<input type="number" name="poll_seconds" min="30" max="86400" required></label>
         <label>Indexing batch size<input type="number" name="batch_size" min="1" max="64" required></label>
         <label>Default search mode<select name="default_mode"><option value="hybrid">Hybrid</option><option value="semantic">Semantic</option><option value="keyword">Keyword</option></select></label>
         <label>Default result count<input type="number" name="result_limit" min="1" max="20" required></label>
@@ -19,15 +25,31 @@
     </fieldset>
     <div class="pb-settings-buttons"><button class="btn" id="pb-settings-save" type="submit" disabled>Save settings</button><button class="btn" id="pb-settings-reload" type="button">Reload</button><button class="btn" id="pb-settings-index" type="button" disabled>Update index now</button></div>
   </form>
-  <section aria-label="Search service status"><h3>Model and index</h3><p id="pb-settings-status">Loading…</p><p class="pb-settings-muted" id="pb-settings-model"></p></section>
-</dialog>
+  <section class="pb-settings-status-card" aria-label="Search service status"><h3>Model and index</h3><p id="pb-settings-status">Loading…</p><p class="pb-settings-muted" id="pb-settings-model"></p></section>
+  </div>
+  <details class="pb-settings-explanation"><summary>How index updates work</summary>
+    <p>No changes to the saved revision or indexing configuration means no rebuild. On a change, unchanged files reuse cached text and embeddings; a new complete search index is published when ready. Removed files disappear from the new index.</p>
+    <p>The first run, enabling PDF text, or a manual update may also require indexing. Opening documents and searching do not trigger a rebuild. Git synchronization and direct save/pull event triggers are planned separately.</p>
+  </details>
+  </section>
+</main>
 <style>
-#projectbook-settings-dialog { width:min(620px,calc(100vw - 32px)); max-height:90vh; margin:auto; overflow:auto; padding:24px; border:1px solid #dce3eb; border-radius:12px; color:#273549; box-shadow:0 12px 40px #0003; }
-#projectbook-settings-dialog::backdrop { background:#142a4355; }
+#wiki-wrapper.pb-settings-page { max-width:1100px; margin:0 auto; padding:8px 0 32px; color:#273549; }
 .pb-settings-heading { display:flex; align-items:center; justify-content:space-between; gap:16px; }
-.pb-settings-heading h2 { margin:0; font-size:22px; }
+.pb-settings-heading h1 { margin:0; font-size:28px; font-weight:650; }
+.pb-settings-tabs { display:flex; gap:24px; margin:26px 0 24px; }
+.pb-settings-tabs a { padding:8px 0; color:#536b85; text-decoration:none; }
+.pb-settings-tabs a[aria-selected="true"] { color:#154b80; border-bottom:2px solid #154b80; font-weight:600; }
+.pb-settings-columns { display:grid; grid-template-columns:minmax(0,1fr) 270px; gap:32px; align-items:start; }
+.pb-settings-status-card { border-radius:10px; background:#f6f8fb; padding:18px; overflow-wrap:anywhere; }
+.pb-settings-status-card h3 { font-size:16px; margin:0 0 12px; }
+.pb-settings-explanation { margin-top:28px; max-width:700px; color:#63748a; font-size:13px; line-height:1.6; }
+.pb-settings-explanation summary { cursor:pointer; font-weight:600; color:#45566c; }
+.pb-settings-explanation p { margin-top:12px; }
+#pb-settings-message:empty { display:none; }
+#pb-settings-message { margin-bottom:16px; }
 .pb-settings-muted { color:#63748a; font-size:13px; line-height:1.5; margin:10px 0; }
-#pb-settings-fields { border:0; padding:0; margin-top:20px; }
+#pb-settings-fields { border:0; padding:0; margin-top:0; }
 #pb-settings-fields legend { font-size:17px; font-weight:600; margin-bottom:14px; }
 #pb-settings-fields small { font-size:11px; color:#63748a; margin-left:6px; }
 .pb-settings-check { display:flex; align-items:center; gap:9px; margin:12px 0; font-weight:500; }
@@ -37,12 +59,12 @@
 .pb-settings-buttons { display:flex; flex-wrap:wrap; gap:8px; margin-top:18px; }
 #pb-settings-status { white-space:pre-line; font-size:14px; line-height:1.6; }
 #pb-settings-message { color:#8a4100; }
+@media(max-width:1100px) { .pb-settings-columns { grid-template-columns:1fr; } }
 @media(max-width:480px) { .pb-settings-grid { grid-template-columns:1fr; } }
-@media print { #projectbook-settings-dialog { display:none !important; } }
+
 </style>
 <script>
 (() => {
-  const dialog = document.getElementById('projectbook-settings-dialog');
   const form = document.getElementById('pb-settings-form');
   const fields = document.getElementById('pb-settings-fields');
   const message = document.getElementById('pb-settings-message');
@@ -55,7 +77,8 @@
   const booleans = ['enabled','auto_index','include_pdf'];
   const numbers = ['poll_seconds','batch_size','result_limit'];
   const draft = () => Object.fromEntries(Object.keys(baseline || {}).map(key => [key, booleans.includes(key) ? form.elements[key].checked : numbers.includes(key) ? Number(form.elements[key].value) : form.elements[key].value]));
-  function buttons() { save.disabled = busy || !editable || !baseline || JSON.stringify(draft()) === JSON.stringify(baseline); }
+  const dirty = () => !!baseline && JSON.stringify(draft()) !== JSON.stringify(baseline);
+  function buttons() { save.disabled = busy || !editable || !dirty(); fields.disabled = busy || !editable; }
   async function api(path = '', payload) {
     const response = await fetch(endpoint + path, payload === undefined ? {cache:'no-store'} : {method:'POST', headers:{'Content-Type':'application/json','X-ProjectWiki-Request':'1'},body:JSON.stringify(payload)});
     const data = await response.json(); if (!response.ok) throw new Error(data.error || 'Settings unavailable'); return data;
@@ -87,11 +110,13 @@
       }
     } catch(error) { message.textContent = error.message; if (reset) { editable=false; fields.disabled=true; save.disabled=true; index.disabled=true; } }
   }
-  document.getElementById('projectbook-settings-open').addEventListener('click', () => { dialog.showModal(); load(true); clearInterval(timer); timer=setInterval(() => { if (!busy) load(false); },5000); });
-  document.getElementById('pb-settings-close').addEventListener('click', () => dialog.close());
-  dialog.addEventListener('close', () => clearInterval(timer));
-  form.addEventListener('input', buttons);
-  reload.addEventListener('click', () => load(true));
+  const startPolling = () => { clearInterval(timer); timer=setInterval(() => { if (!busy && !document.hidden) load(false); },5000); };
+  load(true); startPolling();
+  window.addEventListener('pagehide', () => clearInterval(timer));
+  window.addEventListener('pageshow', startPolling);
+  window.addEventListener('beforeunload', event => { if (dirty() || busy) { event.preventDefault(); event.returnValue=''; } });
+  form.addEventListener('input', () => { buttons(); message.textContent = dirty() ? 'Unsaved settings.' : ''; });
+  reload.addEventListener('click', () => { if (!dirty() || window.confirm('Discard unsaved settings and reload?')) load(true); });
   form.addEventListener('submit', async event => {
     event.preventDefault(); if (save.disabled) return;
     busy=true; buttons(); reload.disabled=true; index.disabled=true;
