@@ -168,3 +168,20 @@
 - Eleven Python tests and 27 Ruby tests (292 assertions) pass. Includes no model/database inference when disabled, version conflicts, validation, no-op writes, cancellation boundaries, read-only/operator distinction and request-origin/header guards.
 - Real HTTP checks: persisted changes, stale-settings 409, omitted MCP defaults applied, disabled MCP search and manual indexing rejected; original enabled settings restored. Browser check: first view shows disabled/unloaded model, enabling and Save works, unchanged Save becomes disabled again.
 - TODO audit: editor has native Markdown checklist support via listsPlugin/ListsToggle; stable task IDs, separate task files/metadata and consolidated task list remain planned. Per user clarification, no TODO implementation in this step.
+
+
+## Primary RAG and MCP PDF reading — 2026-10-25 (pending review)
+
+- Settings were approved and committed as `42ba1e68`, without push. This stage remains uncommitted/unpushed.
+- Primary deployment at 4569 now uses its own Qdrant/index/settings volumes and retains Web UI/MCP document and agent-memory writes. Existing downloaded model files were copied into its independent model volume to avoid downloading again. Ignored `settings.local.sh` enables RAG, its initial search default and local Settings administration; reproducible setup/rollback is in README. The read-only 4570 experiment remains separate and running.
+- PDF extraction uses Poppler in the wiki image and committed Git blobs; no RAG dependency. Original attachments use MCP resource links/resources/read or exact base64 byte ranges. Both text continuations and binary reads pin source revisions. Resource/template access uses the same MCP authentication; no public file endpoint was added.
+- Automated regression: 31 tests / 334 assertions, no failures. Covers real generated PDFs (blank pages, ranges, dense-page text continuation, 51-page batching), exact binary reconstruction, immutable historical reads, malformed PDF/URI/ranges, hidden/symlink/path rejection, token enforcement, and existing settings/MCP/save/navigation behavior.
+- Live MCP: all read/write/search tools discovered together; complete two-page PDF read; reconstructed its full text over 11 small responses without omissions; original 34,984-byte PDF returned via resources/read and byte ranges with identical Git blob SHA. Selected pages of 206-page and 24-page manuals read successfully. PDF text and original-file access also passed with semantic search disabled; settings restored afterward.
+- First page of every test-book PDF: 29 successful reads, zero extraction failures, five empty first pages, 1.71 seconds total on this Mac. Empty text can be a scan/blank/design page; no OCR is implemented. This checks first-page readability, not every page in each PDF.
+- Test-book HEAD remained `a0e90d2caaa4dca007e60e13e973d0715fc43795`, clean. No document/memory writes were made for these checks. Raw Notes requirements were recorded in PLAN; TODO/Raw Notes implementation is deferred.
+- Primary index ready: 125 indexed files, 9,774 fragments, 272.557 seconds for the completed build, matching current book HEAD (`stale=false`). Live hybrid search found a PDF; page text and original-file metadata matched the retrieved source SHA/revision. Russian semantic query returned results. A version-checked document edit dry-run remained unchanged and made no commit. Settings UI shows ready/up to date; main editing controls remain present.
+
+## Local port convention — 2026-10-25
+
+- Default primary port changed to 4000 in Compose, launch configuration, examples, README and AGENTS.md. The ignored local settings and existing Codex `projectbook` MCP URL were updated accordingly. Existing parallel experiment 4570 is unchanged.
+- Recreated only the primary wiki container with the new port/public URL, retaining book and RAG volumes. Verified Web UI HTTP 200, all 15 MCP tools (including PDF and writes), and RAG state ready. No commit or push.

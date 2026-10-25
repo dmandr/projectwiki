@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 source "$(dirname "$0")/common.sh"
-# Dedicated sandbox. Never replace the normal 4569 deployment.
+# Dedicated sandbox. Never replace the normal 4000 deployment.
 export PROJECTBOOK_INSTANCE=projectbook-rag
 export PROJECTBOOK_PORT=4570
 export PROJECTBOOK_IMAGE=projectwiki:rag-local

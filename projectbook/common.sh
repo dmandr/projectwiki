@@ -6,7 +6,7 @@ if [[ -f "$PROJECTBOOK_SCRIPT_DIR/settings.local.sh" ]]; then
   source "$PROJECTBOOK_SCRIPT_DIR/settings.local.sh"
 fi
 export PROJECTBOOK_WIKI_DIR="${PROJECTBOOK_WIKI_DIR:-$PROJECTBOOK_SCRIPT_DIR/../../testwiki-projectwiki}"
-export PROJECTBOOK_PORT="${PROJECTBOOK_PORT:-4569}"
+export PROJECTBOOK_PORT="${PROJECTBOOK_PORT:-4000}"
 export PROJECTBOOK_INSTANCE="${PROJECTBOOK_INSTANCE:-projectbook-fork}"
 export PROJECTBOOK_IMAGE="${PROJECTBOOK_IMAGE:-projectwiki:local}"
 export GOLLUM_REF="${GOLLUM_REF:-main}"

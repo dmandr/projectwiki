@@ -7,7 +7,7 @@ services:
     image: ${PROJECTBOOK_IMAGE:-projectwiki:local}
     init: true
     ports:
-      - '127.0.0.1:${PROJECTBOOK_PORT:-4569}:4567'
+      - '127.0.0.1:${PROJECTBOOK_PORT:-4000}:4567'
     volumes:
       - type: bind
         source: '${PROJECTBOOK_WIKI_DIR:-../../testwiki-projectwiki}'
@@ -25,5 +25,5 @@ services:
       PROJECTBOOK_MCP_DOCUMENT_WRITE: '${PROJECTBOOK_MCP_DOCUMENT_WRITE:-true}'
       PROJECTBOOK_MCP_TOKEN: '${PROJECTBOOK_MCP_TOKEN:-}'
       PROJECTBOOK_SETTINGS_ADMIN: '${PROJECTBOOK_SETTINGS_ADMIN:-false}'
-      PROJECTBOOK_PUBLIC_URL: 'http://127.0.0.1:${PROJECTBOOK_PORT:-4569}'
+      PROJECTBOOK_PUBLIC_URL: 'http://127.0.0.1:${PROJECTBOOK_PORT:-4000}'
     restart: unless-stopped

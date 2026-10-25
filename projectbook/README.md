@@ -21,7 +21,7 @@
 
 Для приватного GitHub-репозитория доступ нужен только хосту, выполняющему clone. SSH-ключи и токены в контейнер не передаются. Скрипт сохраняет настоящий `origin`, но сам не делает commit/push и не включает синхронизацию.
 
-`start.sh` проверяет книгу и ветку, собирает образ, запускает контейнер и ждёт успешного healthcheck. После запуска: **http://127.0.0.1:4569/Home**.
+`start.sh` проверяет книгу и ветку, собирает образ, запускает контейнер и ждёт успешного healthcheck. После запуска: **http://127.0.0.1:4000/Home**.
 
 В Finder также можно запускать `Start.command`, `Stop.command`, `Status.command` и `Cleanup.command`. Первичная подготовка книги выполняется в Terminal командой выше.
 
@@ -59,7 +59,7 @@ GOLLUM_READ_ONLY=true ./projectbook/start.sh
 ```
 
 - `PROJECTBOOK_WIKI_DIR`: абсолютный путь к отдельному обычному clone (не git worktree с внешним `.git`). По умолчанию `../testwiki-projectwiki` относительно корня приложения.
-- `PROJECTBOOK_PORT`: порт на `127.0.0.1`, по умолчанию 4569.
+- `PROJECTBOOK_PORT`: порт на `127.0.0.1`, по умолчанию 4000.
 - `PROJECTBOOK_INSTANCE`: отдельное имя Compose-проекта для второго экземпляра.
 - `PROJECTBOOK_IMAGE`: локальный тег образа.
 - `GOLLUM_REF`: ветка книги, по умолчанию `main`; checkout должен находиться на ней и иметь хотя бы один commit.
@@ -172,12 +172,12 @@ A separate read-only deployment at port 4570 adds local Qdrant/FastEmbed search 
 
 ### MCP: book access and durable agent memory
 
-The local Streamable HTTP endpoint is `http://127.0.0.1:4569/mcp` (same container and port as the wiki). It uses the official Ruby SDK, pinned to `mcp 1.8.1`. No external model/API key or database is needed. It reads saved documents, writes agent notes, and creates/edits Markdown through the shared browser save service with optimistic version checks. It does **not** expose Move, uploads, deletion or Git push.
+The local Streamable HTTP endpoint is `http://127.0.0.1:4000/mcp` (same container and port as the wiki). It uses the official Ruby SDK, pinned to `mcp 1.8.1`. No external model/API key or database is needed. It reads saved documents, writes agent notes, and creates/edits Markdown through the shared browser save service with optimistic version checks. It does **not** expose Move, uploads, deletion or Git push.
 
 Connect a local Codex client:
 
 ```sh
-codex mcp add projectbook --url http://127.0.0.1:4569/mcp
+codex mcp add projectbook --url http://127.0.0.1:4000/mcp
 codex mcp list
 ```
 
@@ -185,7 +185,7 @@ Or merge this section into the client's configuration (do not replace the rest o
 
 ```toml
 [mcp_servers.projectbook]
-url = "http://127.0.0.1:4569/mcp"
+url = "http://127.0.0.1:4000/mcp"
 ```
 
 Reconnect/restart the client's MCP connection after configuration. These instructions follow [OpenAI's MCP connection example](https://developers.openai.com/learn/docs-mcp). We do not change your client settings automatically. An agent on another computer or a cloud executor cannot reach this Mac via its own `127.0.0.1`; remote HTTPS/auth deployment remains a separate step.
@@ -247,10 +247,37 @@ MCP runs in the same process and outer write lock as the Web UI. Document and me
 
 Limits: request 3 MiB; tool response 256 KiB; 100 results per page; Markdown text up to 2 MiB; reads up to 500 lines/40,000 characters; diffs up to 40,000 characters; memory content up to 20,000 characters and complete record up to 100 KB. Truncation/pagination are explicit. Source text is cached by blob SHA with a 32 MiB process-local bound. A changed blob is read again; no generated cache is committed.
 
-Optional semantic/hybrid search and PDF text extraction are available in the separate [RAG experiment](rag/README.md). Not yet implemented: OCR, automatic summarisation, full task management, multi-document transactions, Move/attachments through MCP, or Git synchronization. The vector index remains rebuildable, while authored summaries and notes live in Git. Any external transfer of book content needs separate configuration.
+Optional semantic/hybrid search is available through the per-deployment [RAG services](rag/README.md). The primary local deployment can enable it while retaining document and memory writes. PDF text and original attachment reads work without RAG. Not yet implemented: OCR, automatic summarisation, full task management, multi-document transactions, Move/attachment uploads through MCP, or Git synchronization. The vector index remains rebuildable, while authored summaries and notes live in Git. Any external transfer of book content needs separate configuration.
 
 Tests (temporary repositories; not the user's book):
 
 ```sh
 docker exec -i projectbook-fork-wiki-1 ruby - < projectbook/test/mcp_test.rb
 ```
+
+
+### PDF text and original files through MCP
+
+The same `/mcp` endpoint exposes:
+
+- `read_pdf_text(path, start_page?, end_page?, page_offset?, max_chars?, revision?)`: omit the page range for the whole document, or specify an inclusive 1-based range. Returns ordered `{page, text, offset, page_characters, empty}` records, source SHA and revision. A response has at most 50 pages / 40,000 characters. When `complete=false`, call again with `start_page=next_page`, `page_offset=next_page_offset`, the returned `revision`, and the same `requested_end_page`. Continue until complete; the last response alone is not the whole document. Empty text is not evidence that the page has no meaningful image content.
+- `read_attachment(path, format="resource", revision?)`: returns metadata and a standard MCP `resource_link`. Read its URI with `resources/read` to get the exact original file as a binary resource (base64 in the protocol). URI embeds the Git revision; it continues to read that version after later edits. It uses the same MCP authentication and visibility checks, not a public download URL.
+- `read_attachment(path, format="bytes", offset=0, length=65536, revision?)`: fallback for clients without resource support and files over the resource limit. Decode each base64 part separately and concatenate bytes; follow `next_offset` with the same revision until null. Verify `sha` as Git's SHA-1 of `blob <byte_length>\0<bytes>`.
+
+PDF extraction uses Poppler in the wiki image, independent of embeddings, Qdrant, model download and the semantic-search enable switch. It reads committed Git blobs; uncommitted checkout changes are excluded. Extraction limits: 100 MiB input, 3,000 pages, 50 pages per call, 1 GiB child address space, 25 CPU / 30 wall seconds per command, 16 MiB extracted-output file. Invalid/password-protected PDFs and exceeded limits produce explicit errors; use a smaller page range or retrieve the original. No OCR or guaranteed table reconstruction. PDF reads may temporarily queue writes behind the existing MCP/UI lock.
+
+Original-file limits: 100 MiB attachment, 16 MiB per `resources/read`; byte-range responses up to 96 KiB of binary data. Paths must be visible regular attachments in the selected book history. Hidden files, symlinks, Markdown-as-attachment and paths outside the book are rejected. These are read APIs; uploads are a later step.
+
+### Primary deployment with RAG
+
+Copy `settings.example.sh` to ignored `settings.local.sh` and set:
+
+```sh
+export PROJECTBOOK_RAG_AVAILABLE=true
+export PROJECTBOOK_RAG_ENABLED=true
+export PROJECTBOOK_SETTINGS_ADMIN=true
+```
+
+`PROJECTBOOK_RAG_ENABLED` is an initial default; subsequent values are persisted by Settings. Run `./projectbook/start.sh`. Primary Web UI remains `http://127.0.0.1:4000/Home`, MCP remains `http://127.0.0.1:4000/mcp`, and write tools remain enabled. Each deployment has separate model/index/settings volumes. To keep RAG installed but disable search/indexing use Settings. To remove sidecars entirely, set `PROJECTBOOK_RAG_AVAILABLE=false` and rerun start; volumes and book remain intact. PDF reading remains available in either case.
+
+Existing MCP clients must refresh tool discovery/reconnect to see `search_knowledge`, `get_search_index_status`, `read_pdf_text`, and `read_attachment`. No URL change is needed for a client already using port 4000. Agent guidance distinguishes semantic/hybrid retrieval from literal Markdown search and directs the agent to verify PDF search excerpts against source pages.

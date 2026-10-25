@@ -78,6 +78,7 @@ Gem::Specification.new do |s|
     lib/gollum/projectbook_creation.rb
     lib/gollum/projectbook_save.rb
     lib/gollum/projectbook_knowledge.rb
+    lib/gollum/projectbook_attachments.rb
     lib/gollum/projectbook_mcp.rb
     lib/gollum/projectbook_settings.rb
     lib/gollum/helpers.rb
