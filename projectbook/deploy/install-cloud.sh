@@ -31,6 +31,7 @@ cat > /etc/systemd/system/projectbook-book-push.service <<'UNIT'
 Description=Push committed ProjectBook changes to origin
 After=network-online.target
 [Service]
+Environment=HOME=/root
 ExecStart=/usr/bin/python3 /opt/projectbook/watch-push.py /opt/projectbook/book /opt/projectbook/book-push.json
 Restart=always
 RestartSec=10
@@ -38,7 +39,8 @@ RestartSec=10
 WantedBy=multi-user.target
 UNIT
 systemctl daemon-reload
-systemctl enable --now projectbook-book-push.service
+systemctl enable projectbook-book-push.service
+systemctl restart projectbook-book-push.service
 docker compose up -d --wait --wait-timeout 180
 docker compose ps
 REMOTE

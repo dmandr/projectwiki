@@ -7,12 +7,14 @@ state=Path(sys.argv[2]).resolve()
 state.parent.mkdir(parents=True,exist_ok=True)
 env=dict(os.environ,GIT_TERMINAL_PROMPT='0',GIT_SSH_COMMAND='ssh -o BatchMode=yes -o ConnectTimeout=10')
 def git(*args):
- return subprocess.run(['git','-C',str(book),*args],env=env,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,timeout=60)
+ return subprocess.run(['git','-c','safe.directory='+str(book),'-C',str(book),*args],env=env,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,timeout=60)
 last=None
 while True:
  try:
   head=git('rev-parse','HEAD').stdout.strip()
-  branch=git('symbolic-ref','--short','HEAD').stdout.strip()
+  branch_result=git('symbolic-ref','--short','HEAD')
+  if branch_result.returncode: raise RuntimeError(branch_result.stderr.strip() or 'Cannot read book branch')
+  branch=branch_result.stdout.strip()
   if not branch: raise RuntimeError('Detached HEAD: auto-push paused')
   if head!=last or time.time()-checked>60:
    result=git('push','--porcelain','origin','HEAD:refs/heads/'+branch)
