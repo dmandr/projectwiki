@@ -288,3 +288,70 @@ Existing MCP clients must refresh tool discovery/reconnect to see `search_knowle
 Use the header gear icon or open `http://127.0.0.1:4000/gollum/settings`. Settings now has its own page; Semantic Search is the first tab. The status card reports model/index state. Save is available only when values differ from the saved configuration; unsaved changes are indicated and guarded when leaving. Reload asks before discarding changed values. Settings remain per deployment, outside the book, with server-side version checks.
 
 “Update automatically after saved changes” checks the local Git revision at the configured interval. It notices browser/MCP commits and externally pulled commits; it does not perform Git pull. Unchanged files reuse cached embeddings, while each changed snapshot currently builds a complete replacement Qdrant collection. “How index updates work” explains this distinction. Git pull integration and direct commit/pull event triggers remain planned.
+
+### TODO tasks and embedded lists
+
+Open `/gollum/tasks` using the checklist icon. A task belongs to exactly **one list**, whose name is its tag. Edit task text directly in its row, toggle the checkbox, or click its list/tag to choose another list or create one inline. New tasks start open in **Default** (an existing case-insensitive name is reused). The board supports list/status/text filters and renaming lists without changing their IDs. There are no task dialogs, due-date/notes fields, or technical metadata disclosures; explanatory notes belong in ordinary document content.
+
+The editor toolbar has three icon-only actions with tooltips: **New TODO**, **Insert existing TODO**, and **Insert TODO list**, available in Visual and Markdown (hidden in Changes). **Insert existing TODO** opens a searchable popup: toggle one or several list chips at the top, then search task titles within those lists. Search ignores case and matches all entered words; Clear selects no lists and All lists restores them. Results show completion, list and source document; click a result or press Enter in search to insert its reference at the editor cursor. Results render in batches of 50 with Show more. Escape or the close icon cancels without changing the document. **Insert TODO list** has a searchable popup with an all/open/done filter and optional new-list creation. New TODO inserts an open task immediately and focuses its text; the list/tag is a small dropdown beside it. On an editing page these changes are drafts: **Save** commits the page, task/list files and attachments together after checking every changed file's version. Closing keeps the task metadata in the same browser draft. The normal unsaved indicator includes task changes. Text Undo/Redo handles references; task fields/checkboxes also have staged state, and Discard removes the whole draft. In a viewed document, only the completion checkbox is editable and saves immediately to Git; task text and list pills are static. Text/list changes in a document require Edit and are staged until Save. The dedicated board retains its editing controls. The optional `status=open` or `status=done` filter affects the embedded list only.
+
+Markdown uses normal links, with relative paths from the document:
+
+```markdown
+[TODO: Check oil](../.projectbook/tasks/22222222-2222-4222-8222-222222222222.md)
+[TODO list: Spring](../.projectbook/task-lists/11111111-1111-4111-8111-111111111111.md?status=open)
+```
+
+The task/list file is authoritative. Link text is a portable fallback; visual inline title editing updates that label and stages the task file together. Manually changing only the Markdown label does not rename the canonical task. Copy a reference to mention the same task elsewhere; **New TODO** creates a new ID. Removing a reference does not delete an existing task. A new task whose insertion is undone is not saved as an orphan. Unresolved references and malformed metadata are reported instead of silently creating files on read. Historical documents use the historical task/list snapshot, read-only.
+
+Task files begin with the title, followed by a fenced `projectbook-todo` JSON object and optional free Markdown notes:
+
+````markdown
+# Check oil
+
+```projectbook-todo
+{
+  "kind": "task",
+  "id": "22222222-2222-4222-8222-222222222222",
+  "list_id": "11111111-1111-4111-8111-111111111111",
+  "status": "open",
+  "due": "",
+  "schema": 1
+}
+```
+
+Check the manual before starting.
+````
+
+Lists use `.projectbook/task-lists/<uuid>.md`, `kind: "list"`, `id`, and `schema: 1`, plus an H1 name and notes. List names are unique ignoring case; IDs and paths remain fixed. Use inline controls or preserve this schema when editing files directly. Existing due/notes values are preserved for compatibility, although their input fields are no longer shown. No database or HTML comments are required. Ordinary Markdown checklist items remain independent. A checklist item containing only a structured TODO link uses one visible checkbox synchronized with that task, avoiding duplicate checkboxes.
+
+MCP exposes `list_todo_lists`, `list_tasks`, `read_todo`, and `save_todos`. Reads accept pinned revisions; lists paginate. `save_todos` accepts up to 100 complete task/list objects with `expected_version` (empty for new), defaults to `dry_run: true`, and applies with `dry_run: false` in a single commit. It shares document-write permissions and the Web UI write lock. A stale task rejects the whole transaction. Creating a document plus tasks atomically is currently a Web editor operation; MCP task batches and document writes are separate operations. No deletion/archive is implemented yet. The TODO catalog derives source references from Markdown links at the requested Git revision.
+
+Tests: `npm --prefix projectbook/editor test`; Ruby TODO/API/version tests are in `projectbook/test/tasks_test.rb` and run in the normal Docker test environment. The test book includes `playground/todo-demo.md` with Spring/Autumn examples; none of that book is packaged in the application repository.
+
+#### Jump from a list to task context
+
+In an embedded TODO list, the task title is a navigation link; the checkbox still changes completion. One source opens the containing document at `#todo-<UUID>` and scrolls the task into view without highlighting it. Several source documents open a small chooser with their paths. Click outside or press Escape to close it. Direct task occurrences are editable inline only in the page editor; normal viewing exposes only the completion checkbox. Unsaved new tasks must be saved before navigating; normal editor draft protection still applies.
+
+New tasks created with a document record `source_path`. The catalog also discovers all actual TODO links (excluding code examples and external links), so existing tasks and moved documents work. Embedded list links are not definitions. With no remaining document reference, navigation falls back to the permanent task file. Historical links use the same historical snapshot. Source discovery does not modify book files.
+
+### Delete a document
+
+The trash icon beside Rename/Move is available only in the editor of a saved document. It opens a confirmation showing the exact path and warns when this editor has unsaved changes. Confirming removes the document in a local Git commit, clears this editor's browser draft, and returns to its parent folder. Saved history, attachments and separate TODO files remain. The version and working-copy checks reject stale or uncommitted external changes. Normal page viewing has neither the Delete link nor the “When was this page last modified?” footer; use History for revisions.
+
+TODO insertion uses its own spacing behavior: Markdown mode inserts only the reference at the cursor, with no added whitespace. Visual mode inserts the reference plus one hard line break (serialized as a trailing backslash and newline), without the attachment helper's surrounding empty paragraphs. The rule applies to new/existing tasks and embedded lists. User-authored whitespace elsewhere is not normalized.
+
+Embedded TODO lists show the list name once in the heading; their task rows omit the redundant list/tag and its selector, in both viewing and visual editing. Individual task occurrences and the general TODO board retain their list selector.
+
+Task text in the visual editor uses an independent plain-text Lexical root so Select All, typing and keyboard Undo stay inside that task. The list selector is a native menu over a compact pill without visible arrows. Text and pill share inline flow, so the pill follows the last line of a long task instead of occupying a separate right-hand column.
+
+The Visual / Changes / Markdown selector lives in the page action bar beside Save/Close. In Visual mode, TODO icons sit immediately after Bulleted list / Numbered list / Checklist and before link/media tools; the list tools stay grouped when the toolbar wraps. Markdown keeps its TODO insertion tools.
+
+
+### Hidden TODO storage migration
+
+Tasks live in `.projectbook/tasks/<uuid>.md`; lists in `.projectbook/task-lists/<uuid>.md`. They remain Git-tracked but are omitted from the document tree, file overview, ordinary document search and newly built RAG indexes. Use TODO UI/MCP to access them. This is UI organization, not a confidentiality boundary.
+
+For an existing book, run `PROJECTBOOK_MIGRATE_TODOS=true ./projectbook/start.sh`. The opt-in migration runs before the server accepts requests, requires a clean checkout on the configured branch, validates metadata and destinations, and commits file moves plus Markdown link updates together. Repeating it is a no-op. Later launches may omit the flag. Keep one writer for the book during this maintenance step. Legacy links and historical revisions remain readable; old browser drafts with changed document versions must be reconciled through the existing conflict checks. Code examples and external links are left intact. Nonstandard HTML/wiki references are not rewritten; structured legacy TODO links are still recognized. Existing RAG generations refresh through the configured index update mechanism.
+
+To undo the migration, revert its book commit with the server stopped, then restore the corresponding application version. Do not reset or rewrite shared history.

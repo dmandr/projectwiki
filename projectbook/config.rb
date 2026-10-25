@@ -39,3 +39,10 @@ end
 
 require_relative 'extensions/workspace_navigation'
 Precious::Views::Layout.include(ProjectBookWorkspaceNavigation)
+
+# Opt-in, idempotent migration runs before the web server accepts requests.
+if ENV['PROJECTBOOK_MIGRATE_TODOS'] == 'true'
+  require 'gollum/projectbook_task_migration'
+  wiki = Gollum::Wiki.new(Precious::App.gollum_path, Precious::App.wiki_options)
+  warn "TODO storage migration: #{Gollum::ProjectbookTaskMigration.run(wiki).inspect}"
+end

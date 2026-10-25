@@ -154,6 +154,7 @@
       {{#projectbook_rename}}<button type="button" class="btn btn-sm projectbook-tool minibutton-rename-page" title="Rename" aria-label="Rename">{{#octicon}}typography{{/octicon}}</button>{{/projectbook_rename}}
       {{#projectbook_attachment}}<a class="btn btn-sm projectbook-tool" href="{{raw_url}}" target="_blank" rel="noopener" title="Open original" aria-label="Open original">{{#octicon}}link-external{{/octicon}}</a>{{/projectbook_attachment}}
       <a class="btn btn-sm projectbook-tool" href="{{overview_path}}" title="All files" aria-label="All files">{{#octicon}}file-directory{{/octicon}}</a>
+      <a class="btn btn-sm projectbook-tool" href="{{base_url}}/gollum/tasks" title="TODO" aria-label="TODO">{{#octicon}}checklist{{/octicon}}</a>
       <a class="btn btn-sm projectbook-tool" id="projectbook-settings-open" href="{{base_url}}/gollum/settings" title="Settings" aria-label="Settings">{{#octicon}}gear{{/octicon}}</a>
     </nav>
   </div>
@@ -179,5 +180,7 @@
 </form>
 {{/projectbook_rename}}
 </div>
+<link rel="stylesheet" href="{{base_url}}/projectbook-editor/tasks-view.css">
+<script type="module" id="projectbook-todos-script" data-revision="{{projectbook_todo_revision}}" src="{{base_url}}/projectbook-editor/tasks-view.js"></script>
 </body>
 </html>

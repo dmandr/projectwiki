@@ -193,3 +193,96 @@
 - Header gear is now a normal link to `/gollum/settings`; modal markup/script is removed from document pages. Dedicated view/template shares the book layout and offers a Semantic Search tab, status card, return link and indexing explanation. Existing JSON settings endpoints/permissions/version checks remain unchanged.
 - Rebuilt and deployed at port 4000; API regression tests: 3 tests / 13 assertions passed. Live page and JSON endpoint return 200, default interval remains 60, index ready. Browser: gear opens the page, interval 60→61 saves and survives reload, restored 60 saves; returning a draft to its saved value disables Save and clears the dirty indicator. Leaving with a changed draft remained on Settings; after reverting, Back to book navigated normally. Direct page reload and navigation back from Home work. Added beforeunload guard and discard confirmation for Reload.
 - Settings edits do not modify book documents or Git commits. Git pull is explicitly recorded as not implemented. Full task IDs/metadata/list remain planned; only standard Markdown checklists exist in the editor.
+
+### Settings navigation and timing labels follow-up
+- Removed the redundant Back to book button; the explorer and ProjectBook link provide navigation.
+- Replaced Last build with Last indexing duration (minutes/seconds), and added Last indexed using the report completion time in the browser locale. Revision checks that skip rebuilding retain the previous report.
+- Rebuilt on port 4000 and checked the browser: no Back to book link; index ready, duration 4 min 33 s and completion timestamp visible. Changes remain uncommitted pending review.
+
+### Settings connection recovery
+- Investigated a reported Load failed: current backend requests return HTTP 200; the exact interrupted request was not captured. A transient fetch failure previously left a stale error after successful polling.
+- Connection status is now separate from save/conflict messages, clears on successful retry, and initial loading recovers automatically. Poll recovery preserves unsaved form values.
+- `node --test projectbook/test/settings_ui_test.mjs`: 2 tests passed, covering initial failure/recovery and interrupted polling with an unsaved draft and a save-error message.
+
+## TODO lists and document integration — 2026-10-25
+- User simplified the model to one list/tag per task. Implemented portable Markdown task/list files with UUIDs, metadata forms, due dates/notes, versioned batch writes, document-save integration, common board, embedded list links and four MCP tools. Application changes are not committed or pushed.
+- Ruby suite: 45 tests / 436 assertions passed. Covers atomic task/list/document writes, stale task rejection before any document changes, dry run/no-op, missing lists, duplicate names, invalid date/ID/status, local work protection, pinned historical reads, HTTP permissions and updated MCP discovery/write permissions.
+- Editor suite: 16 tests passed. Covers relative links/moves, foreign URLs, code examples, unreferenced new files, staged metadata no-op, undo/redo reference filtering, and resolving historical links from the original document path.
+- Docker rebuilt and healthy on port 4000. Browser: created Spring list and oil task; editor showed a list and repeated reference; Visual → Markdown → Visual kept UUID links; toggles synchronized repeated references; inserted a new task and Autumn/open list and saved all four changed files in test-book commit dcbd570. Confirmed the task API had not persisted editor drafts before Save.
+- Actual MCP: list_todo_lists/list_tasks/read_todo worked; save_todos dry-run and apply moved the belt task to Autumn; stale retry returned 412. The browser then showed that task in the embedded Autumn/open view. Completing it removed it from the filtered view and updated its separate reference; reopened it for the demo.
+- Verified metadata toggle back to original clears Unsaved changes, new task Undo removes its pending file and Redo restores the same staged data; Close and keep draft → reopen → Restore draft → Save preserved task metadata.
+- Fixed viewer failure caused by href-less heading anchors. Historical demo at fc48c6bde809f2398c71c78983750d95ee1981be shows only the old open oil task with disabled controls. The direct Spring list document renders its tasks and collapses machine metadata.
+- Demo: /playground/todo-demo.md; board: /gollum/tasks. Test book has generated local commits; no push. No deletion/archive or backlink index yet. Text Undo and metadata editing remain distinct; the complete draft can be discarded.
+
+## 2026-10-25 — inline TODO editing, no dialogs (uncommitted)
+
+- New TODO inserts an open task in Default and focuses/selects its title. Case-insensitive Default reuse and no staged network writes covered by store tests.
+- Removed task dialogs, due-date/notes fields, technical Metadata disclosures and the Pending TODO details panel. Existing stored notes/dates survive edits.
+- Task text is editable inline, wraps on narrow screens, and supports Cmd+A without Lexical intercepting it. List/tag dropdown selects existing lists or creates a named list inline; no separate popup or Update step.
+- Browser-tested Default insertion, inline text, new list creation, Visual/Markdown round-trip and atomic Save. Git inspection confirmed one commit containing document, new task and list; unused provisional Default was not persisted.
+- Tested a Markdown `- [ ] [TODO: ...](...)` wrapper: one visible checkbox, Space changes canonical task status; changing the same task through an embedded list synchronizes the wrapper. Save and reopening preserve title/status/list and UUID.
+- Test-book page `playground/inline-todo-demo.md` demonstrates the task and its embedded list. Long text wraps; title updates propagate to both occurrences. Discard was tested on this agent-created page only.
+- Editor JS tests: 18/18 pass. Browser error log empty. Docker rebuilt and healthy on port 4000. No application commit/push.
+
+## 2026-10-25 — TODO source navigation (uncommitted)
+
+- Task titles in embedded lists are navigation links; inline definitions still edit text and list membership. Completion checkbox is independent.
+- Actual Markdown references in the requested Git snapshot determine source documents. Code examples/external URLs are excluded. One source links directly; multiple sources open a document-path chooser; missing references fall back to the task file. Newly created tasks record their creation document.
+- Browser verified chooser for the task shared by `playground/inline-todo-demo.md` and `playground/todo-demo.md`, navigation to the selected document and UUID anchor, and automatic scrolling. Explicit highlight state handles asynchronously mounted anchors in WebKit.
+- Tests: 47 Ruby tests / 446 assertions, 19 editor JS tests, all passing. Covers source discovery, ambiguity, historical snapshots, creation origin, source document moves, unsafe paths and encoded/history URLs.
+- Warm catalog requests on the current test book measured 25–48 ms locally. No book files are rewritten by source discovery. Application remains uncommitted; no push.
+
+## 2026-10-25 — Delete in editor, clean page footer (uncommitted)
+
+- Removed the normal-page last-modified and Delete links. Historical revision notice remains.
+- Saved documents expose a trash icon beside Rename/Move. Confirmation shows the exact path, defaults focus to Cancel, and notes unsaved edits when present. New unsaved documents use Discard instead.
+- Delete uses the shared write lock, editing permission, same-origin/custom-header checks, blob version and working-copy checks; it creates a Git deletion commit. The editor clears its draft only after success, and returns to the parent folder.
+- Browser: created disposable `playground/delete-button-check.md`, verified no footer links, opened/cancelled confirmation, then confirmed deletion and verified the page disappeared from the parent listing. No other document was deleted. Screenshot: `.runtime/delete-document.png`.
+- Full Ruby suite passed 50 tests; focused deletion tests passed again after correcting the root-folder return URL. Coverage includes retained history, stale version, uncommitted disk edits, read-only mode, cross-origin requests and repeated deletion. Docker healthy at port 4000. No application commit/push.
+
+## 2026-10-25 — compact TODO insertion (uncommitted)
+
+- Root cause: TODO links added leading/trailing blank lines and reused attachment insertion, which additionally split paragraphs before/after each reference.
+- TODO insertion now bypasses attachment paragraph splitting. Markdown inserts the reference alone; Visual adds one hard line break after it. Heading-to-body insertion preserves the heading boundary.
+- Browser: inserted First/Second/Third consecutively with no manual line breaks, switched Visual → Markdown → Visual, saved and inspected the Git file. Tasks occupy consecutive source lines 3–5, with no blank lines between them. In Markdown, insertion between `Before ` and ` After` added no whitespace.
+- Cleaned only the named test document `Test Pages/to-do-items-2.md` through version-checked MCP preview/apply. Preserved all four task references/IDs, including the fourth task already present on disk. Other documents were not normalized. Verified source lines 3–6 and no unsaved changes after reopening. Screenshot `.runtime/todo-spacing.png`.
+- Build and 19 JS tests passed; Docker deployed on port 4000. Application remains without commit/push.
+
+## 2026-10-25 — omit repeated list names (uncommitted)
+
+- Embedded TODO lists omit the per-task list/tag and its selector. The list name remains in the heading. Direct task occurrences and the general board retain their selectors.
+- Verified `Test Pages/to-do-list.md` in view and visual editor: seven tasks, one heading, no repeated list controls. Checkbox and source links remain. Restored completed-link strikethrough specificity, which the link style previously overrode.
+- Docker build successful on port 4000; no book changes, application commit or push. Screenshot `.runtime/todo-list-compact.png`.
+
+
+## 2026-10-25 — searchable TODO picker and editor toolbar (uncommitted)
+
+- Replaced the existing-task select with a modal containing multi-select list chips, All/Clear, Unicode case-insensitive word search, task/source context and incremental rendering in batches of 50. List insertion also uses a searchable dialog.
+- Moved all three TODO actions into the MDXEditor toolbar as labelled icons, available in Visual and Markdown and disabled in Changes.
+- Editor tests: 21/21 pass, including query/group intersection and a 600-task fixture. Production build and Docker deployment on port 4000 succeed.
+- Browser checks: search plus Spring/Autumn toggles returns the expected three tasks; clearing all lists gives zero; Escape closes without dirtying the page. Visual insertion preserves the caret between explicit text markers; Markdown inserts only the existing UUID link before the following text. List search inserts the selected list with status=open; Changes disables all three controls; New TODO focuses the new task title.
+- Checks ran in the agent's own playground/todo-spacing-check.md editor tab. The draft was discarded afterwards; no book write or app commit/push in this step.
+
+
+## 2026-10-25 — document TODO viewing and flowing list pills (uncommitted)
+
+- Normal document viewing renders task text/list as static spans. Only completion remains editable; embedded list titles still navigate to source. Source navigation scrolls without yellow target highlighting.
+- In the visual editor, task text uses an independent plain-text Lexical root and the native list menu overlays an arrow-free pill. Both share inline flow, including long wrapping titles. Keyboard Undo is scoped to task text.
+- Browser verification on the disposable playground/todo-spacing-check.md: Select All replaced only the task title, a long Russian title wrapped with its pill after the final word, choosing Spring and Save persisted both title and list. Viewed checkbox persisted completion. An embedded Spring list navigated back to the source with no highlight. Reopening preserved text/list/status; keyboard Undo restored task text without changing the page heading or other tasks; New TODO selected its placeholder for immediate replacement. Unsaved verification drafts discarded.
+- The requested Test Pages/todo-items.md was inspected read-only: two static titles and Spring pills, with only checkboxes interactive. Application not committed or pushed. Editor suite 21/21 passed; final production build and Docker deployment on port 4000 succeeded.
+
+
+## 2026-10-25 — editor toolbar grouping (uncommitted)
+
+- Moved TODO icons after the three list controls, keeping them together on wrapped toolbars. Moved Visual/Changes/Markdown to the Save/Close action bar using a React portal that retains the MDXEditor mode context.
+- Production build and Docker deployment succeeded. Browser checked all three modes, arrow-key switching back to Visual, TODO availability in Markdown and correct icon ordering in Visual. Switching modes left No unsaved changes. No book writes, application commit or push.
+
+
+## 2026-10-25 - hidden TODO storage (application uncommitted)
+
+- Task/list storage uses `.projectbook/tasks` and `.projectbook/task-lists`. New references use system paths; parsers and historical MCP reads accept legacy paths. The task board no longer exposes a List document link. Ordinary document writes still reject dot paths; only validated task IDs can create system task files.
+- Explicit startup migration moved 12 tasks and 4 lists, updating links in six documents in test-book commit `19af67b`. All 16 metadata blobs remained byte-identical and IDs were preserved. Startup repeats are no-ops.
+- Tests: editor 22/22; Ruby TODO/migration 11 tests, 86 assertions; MCP 9 tests, 182 assertions. Coverage includes clean-working-tree refusal, one-commit migration, historical reads, preserved code/external URLs, hidden navigation/search and post-migration writes.
+- Browser verified embedded list rendering and absence of Tasks/TaskLists/system directory in tree and root file overview. Created Hidden storage verification in the playground document; Save created its file under .projectbook/tasks, then its checkbox updated successfully. Live MCP read_todo returned that hidden path and done status.
+- The initial image omitted the migration module from the gem manifest; corrected packaging and rebuilt. The final port-4000 deployment is healthy. No application commit/push; only test-book migration and UI verification commits.
+- PLAN records manual ordering and drag/drop moves as the next priority after TODO acceptance.

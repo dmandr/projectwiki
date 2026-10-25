@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { MDXEditor, realmPlugin, addExportVisitor$, rootEditor$, viewMode$,
   headingsPlugin, listsPlugin, quotePlugin, thematicBreakPlugin, linkPlugin, linkDialogPlugin,
   imagePlugin, tablePlugin, codeBlockPlugin, codeMirrorPlugin, frontmatterPlugin, markdownShortcutPlugin,
-  diffSourcePlugin, toolbarPlugin, DiffSourceToggleWrapper, UndoRedo, BoldItalicUnderlineToggles,
+  diffSourcePlugin, toolbarPlugin, UndoRedo, BoldItalicUnderlineToggles,
   BlockTypeSelect, ListsToggle, CreateLink, InsertImage, InsertTable, InsertCodeBlock, Separator } from '@mdxeditor/editor';
 import { $createRangeSelection, $setSelection, $getSelection, $isRangeSelection } from 'lexical';
 import { EditorView } from '@codemirror/view';
@@ -12,6 +12,11 @@ import { rebaseMarkdown } from './move-links.mjs';
 import { documentTitle, withDocumentTitle } from './document-title.mjs';
 import { titleFromPath } from './names.mjs';
 import { imageDimensionsPlugin, ImageToolbar } from './image-dimensions';
+import { todoStore, TodoMessages, useTodos } from './todo-ui';
+import { todoPlugin } from './todo-editor';
+import { TodoToolbar } from './todo-toolbar';
+import { EditorToolbar } from './editor-toolbar';
+import { todoLink, pendingTodos } from './todo-format.mjs';
 import '@mdxeditor/editor/style.css';
 import './style.css';
 
@@ -39,11 +44,17 @@ if (document.getElementById('projectbook-editor-app')) {
   } });
 
   function Editor() {
+    const todos = React.useMemo(() => todoStore({base, staged:true, onChange:()=>stashSoon()}), []);
+    useTodos(todos);
+    React.useEffect(()=>{todos.setDocument(initial,path);todos.load();},[]);
     const ref = useRef(null), current = useRef(initial), normalized = useRef(null);
     const pending = useRef([]), working = useRef(false), allowLeave = useRef(false);
     const queue = useRef(Promise.resolve()), draftTimer = useRef(null);
     const [status, setStatus] = useState(''), [busy, setBusy] = useState(false);
+    React.useEffect(()=>{todos.setBusy(busy);},[busy]);
     const [confirmDiscard, setConfirmDiscard] = useState(false);
+    const [deleteOpen,setDeleteOpen]=useState(false),deleteDialog=useRef(null);
+    React.useEffect(()=>{if(deleteOpen)deleteDialog.current?.showModal();},[deleteOpen]);
     const [files, setFiles] = useState([]), [draft, setDraft] = useState(null);
     const destination = useRef(path);
     const name = useRef(path.split('/').pop());
@@ -75,9 +86,9 @@ if (document.getElementById('projectbook-editor-app')) {
     const targetPath = () => isNew ? [...destination.current.split('/').slice(0, -1), name.current.trim()].join('/') : path;
     const [summary, setSummary] = useState((isNew ? 'Created ' : 'Updated ') + path);
     const picker = useRef(null), container = useRef(null);
-    const dirty = () => (titleEditing && titleValue.trim() !== displayTitle) || current.current !== initial || pending.current.length > 0 || targetPath() !== path;
+    const dirty = () => (titleEditing && titleValue.trim() !== displayTitle) || current.current !== initial || pending.current.length > 0 || targetPath() !== path || todos.visiblePending().length > 0;
     window.projectbookEditorDirty = dirty;
-    const snapshot = () => ({ destination: destination.current, filename: name.current, content: current.current, files: pending.current.map(({url, ...file}) => file), etag: form.dataset.etag, saved: Date.now() });
+    const snapshot = () => ({ todos: todos.pending(), destination: destination.current, filename: name.current, content: current.current, files: pending.current.map(({url, ...file}) => file), etag: form.dataset.etag, saved: Date.now() });
     const stash = () => {
       clearTimeout(draftTimer.current);
       const data = snapshot();
@@ -91,6 +102,7 @@ if (document.getElementById('projectbook-editor-app')) {
     const change = (value, normalization) => {
       if (normalization) { normalized.current ??= value; return; }
       current.current = value === normalized.current ? initial : value;
+      todos.setDocument(current.current,path);
       setHasTextChanges(current.current !== initial);
       setHeadingTitle(documentTitle(current.current, ''));
       stashSoon();
@@ -99,13 +111,14 @@ if (document.getElementById('projectbook-editor-app')) {
       draftStore('get', draftKey).then(value => {
         // Migrate text drafts from the earlier editor without deleting the old copy.
         if (!value) { try { value = JSON.parse(localStorage.getItem('projectbook:mdx:draft:' + location.pathname)); } catch (_) {} }
-        if (value && (value.content !== initial || value.files?.length || (value.filename && value.filename !== name.current) || (value.destination && value.destination !== path))) setDraft(value);
+        if (value && (value.content !== initial || value.files?.length || value.todos?.length || (value.filename && value.filename !== name.current) || (value.destination && value.destination !== path))) setDraft(value);
       }).catch(() => setStatus('Browser draft storage is unavailable. Keep this tab open until Save succeeds.'));
       const warn = event => { if (!allowLeave.current && window.projectbookEditorDirty?.()) { event.preventDefault(); event.returnValue = ''; } };
       window.addEventListener('beforeunload', warn);
       return () => window.removeEventListener('beforeunload', warn);
     }, []);
     const restore = () => {
+      todos.restore(draft.todos); todos.setDocument(draft.content,path);
       pending.current.forEach(file => URL.revokeObjectURL(file.url));
       pending.current = (draft.files || []).map(file => ({...file, url: URL.createObjectURL(file.blob)}));
       setFiles([...pending.current]);
@@ -128,7 +141,7 @@ if (document.getElementById('projectbook-editor-app')) {
       pending.current.push(item); setFiles([...pending.current]); stashSoon();
       return item;
     }
-    function insert(markdown, event) {
+    function insert(markdown, event, layout = 'block') {
       if (bridge.mode === 'diff') throw new Error('Switch to Visual or Markdown to insert attachments.');
       if (bridge.mode === 'source') {
         const element = container.current.querySelector('.cm-editor');
@@ -150,6 +163,17 @@ if (document.getElementById('projectbook-editor-app')) {
           insertBlocks();
         } else ref.current.focus(insertBlocks);
         function insertBlocks() {
+          if (layout === 'todo') {
+            // TODOs are inline references. Do not use the attachment helper's
+            // two paragraph splits; only leave one line break after the row.
+            editor.update(() => {
+              const selection = $getSelection();
+              if ($isRangeSelection(selection) && selection.anchor.getNode().getTopLevelElement()?.getType() === 'heading') selection.insertParagraph();
+            }, {discrete: true});
+            ref.current.insertMarkdown(markdown);
+            editor.update(() => { const selection = $getSelection(); if ($isRangeSelection(selection)) selection.insertLineBreak(); }, {discrete: true});
+            return;
+          }
           // Markdown's leading/trailing blank lines disappear during parsing.
           // Split real editor paragraphs so attachments never join surrounding text.
           editor.update(() => { const selection = $getSelection(); if ($isRangeSelection(selection)) selection.insertParagraph(); }, {discrete: true});
@@ -192,6 +216,24 @@ if (document.getElementById('projectbook-editor-app')) {
         allowLeave.current = true; location.assign(closeUrl);
       } catch (_) { setStatus('Could not store or discard the browser draft. Keep this tab open until Save succeeds.'); }
     }
+    async function deleteDocument() {
+      if(working.current || isNew)return;
+      working.current=true;setBusy(true);setStatus('Deleting document…');
+      try {
+        await stash().catch(()=>{});
+        const response=await fetch(base+'/gollum/projectbook/delete',{
+          method:'POST',headers:{'Content-Type':'application/json','X-ProjectWiki-Request':'1'},
+          body:JSON.stringify({path,etag:form.dataset.etag})
+        });
+        const result=await response.json();
+        if(!response.ok || !result.url)throw new Error(result.error || 'Delete failed. Your draft is kept.');
+        clearTimeout(draftTimer.current);await queue.current.catch(()=>{});
+        await draftStore('delete',draftKey).catch(()=>{});
+        localStorage.removeItem('projectbook:mdx:draft:'+location.pathname);
+        allowLeave.current=true;location.assign(result.url);
+      } catch(error){setStatus(error.message || 'No deletion confirmation. Check the connection before retrying.');}
+      finally{working.current=false;setBusy(false);}
+    }
     async function save(event, requestedPath) {
       event?.preventDefault();
       if (working.current) return;
@@ -205,7 +247,7 @@ if (document.getElementById('projectbook-editor-app')) {
       // An undone/deleted insertion must not leave an orphan in the Git book.
       const used = pending.current.filter(file => current.current.includes(file.source));
       const data = new FormData();
-      data.append('document', JSON.stringify({path: savePath, source_path: path, content, create: isNew, etag: form.dataset.etag, attachments: used.map(file => ({path: file.path}))}));
+      data.append('document', JSON.stringify({path: savePath, source_path: path, content, todos: pendingTodos(todos.pending(), current.current, path), create: isNew, etag: form.dataset.etag, attachments: used.map(file => ({path: file.path}))}));
       data.append('message', !isNew && savePath !== path && summary === `Updated ${path}` ? `Move ${path} to ${savePath}` : summary === `Created ${path}` ? `Created ${savePath}` : summary || `Updated ${savePath}`);
       used.forEach(file => data.append('files[]', file.blob, file.name));
       try {
@@ -236,7 +278,7 @@ if (document.getElementById('projectbook-editor-app')) {
       return () => form.removeEventListener('submit', save);
     });
     const plugins = React.useMemo(() => [
-      integration(), headingsPlugin(), listsPlugin(), quotePlugin(), thematicBreakPlugin(), linkPlugin(), linkDialogPlugin({onClickLinkCallback: source => {
+      integration(), todoPlugin({store:todos,path}), headingsPlugin(), listsPlugin(), quotePlugin(), thematicBreakPlugin(), linkPlugin(), linkDialogPlugin({onClickLinkCallback: source => {
         const local = pending.current.find(file => file.source === source);
         const url = local?.url || new URL(source, new URL(pageUrl, location.origin)).href;
         if (/^(https?:|blob:)/.test(url)) window.open(url, '_blank', 'noopener,noreferrer');
@@ -247,10 +289,13 @@ if (document.getElementById('projectbook-editor-app')) {
       imageDimensionsPlugin(), tablePlugin(), frontmatterPlugin(), codeBlockPlugin({defaultCodeBlockLanguage: 'text'}),
       codeMirrorPlugin({codeBlockLanguages: {text: 'Text', js: 'JavaScript', python: 'Python', sh: 'Shell', json: 'JSON', yaml: 'YAML', '': 'Plain'}}),
       markdownShortcutPlugin(), diffSourcePlugin({viewMode: /<!--|\[\[/.test(initial) ? 'source' : 'rich-text', diffMarkdown: initial}),
-      toolbarPlugin({toolbarContents: () => <DiffSourceToggleWrapper options={['rich-text', 'source', 'diff']}>
-        <UndoRedo/><Separator/><BlockTypeSelect/><BoldItalicUnderlineToggles/><Separator/>
-        <ListsToggle/><CreateLink/><InsertImage/><InsertTable/><InsertCodeBlock/>
-      </DiffSourceToggleWrapper>})
+      toolbarPlugin({toolbarContents: () => {
+        const todoTools=<TodoToolbar store={todos} onError={setStatus} onInsert={(item,status)=>insert(todoLink(item,path,status),null,'todo')}/>;
+        return <EditorToolbar sourceTools={<><span>Markdown</span>{todoTools}</>}>
+          <UndoRedo/><Separator/><BlockTypeSelect/><BoldItalicUnderlineToggles/><Separator/>
+          <span className="pb-editor-list-tools"><ListsToggle/>{todoTools}</span><CreateLink/><InsertImage/><InsertTable/><InsertCodeBlock/>
+        </EditorToolbar>;
+      }})
     ], []);
     return <>
       <div className="pb-document-heading">
@@ -269,7 +314,21 @@ if (document.getElementById('projectbook-editor-app')) {
         <button type="button" className="btn btn-sm" title="Move" aria-label="Move" disabled={busy} onClick={openMove}>
           <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M3 7h7l2 2h9v11H3ZM3 7V4h7l2 3M8 14h9m-3-3 3 3-3 3"/></svg>
         </button>
+        {!isNew && <button type="button" className="btn btn-sm" title="Delete document" aria-label="Delete document" disabled={busy} onClick={()=>{setStatus('');setDeleteOpen(true);}}>
+          <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7"/></svg>
+        </button>}
       </div>
+      {deleteOpen && <dialog ref={deleteDialog} className="pb-move-dialog" aria-labelledby="pb-delete-title" onCancel={event=>{if(busy)event.preventDefault();else setDeleteOpen(false);}}>
+        <h2 id="pb-delete-title">Delete document?</h2>
+        <p><strong>/{path}</strong></p>
+        <p>The page will be removed from the book. Its saved versions remain in Git history. Attachments and separate TODO files are kept.</p>
+        {(dirty() || draft) && <p>Unsaved edits in this editor will be discarded.</p>}
+        <div role="status" className="pb-editor-status">{status}</div>
+        <div className="pb-editor-actions">
+          <button autoFocus type="button" className="btn" disabled={busy} onClick={()=>setDeleteOpen(false)}>Cancel</button>
+          <button type="button" className="btn btn-danger" disabled={busy} onClick={deleteDocument}>Delete document</button>
+        </div>
+      </dialog>}
       <p className="pb-document-location">/{targetPath()}</p>
       {titleEditing && <p className="pb-title-hint">The title is the first # heading in Markdown. The filename and URL stay unchanged. Enter to apply, Escape to cancel.</p>}
       {moveOpen && <dialog ref={moveDialog} className="pb-move-dialog" aria-labelledby="pb-move-title"
@@ -298,6 +357,7 @@ if (document.getElementById('projectbook-editor-app')) {
         <button type="submit" className="btn btn-primary" disabled={busy}>Save</button>
         <button type="button" className="btn" disabled={busy} onClick={() => close(false)}>Close and keep draft</button>
         <button type="button" className="btn" disabled={busy} onClick={() => dirty() || draft ? setConfirmDiscard(true) : close(true)}>Discard</button>
+        <span id="projectbook-editor-modes"/>
         {form.dataset.uploads === 'true' && <button type="button" className="btn" disabled={busy} onClick={() => picker.current.click()}>Attach files</button>}
         <button type="button" className="btn" onClick={download}>Download Markdown</button>
         <input ref={picker} hidden type="file" multiple onChange={event => { attach(event.target.files); event.target.value = ''; }}/>
@@ -309,6 +369,7 @@ if (document.getElementById('projectbook-editor-app')) {
       </div>}
       <div className="pb-editor-status" role="status" aria-live="polite">{status.startsWith('Title updated.') && !dirty() ? '' : status}</div>
       <div className="pb-change-state" role="status">{hasTextChanges || dirty() ? 'Unsaved changes' : 'No unsaved changes'}</div>
+      <TodoMessages store={todos}/>
       <div className="pb-content-label">Document content</div>
       <div id="projectbook-mdx" ref={container} aria-busy={busy}
         onKeyDown={event => {if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') save(event);}}

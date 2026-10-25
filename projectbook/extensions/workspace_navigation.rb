@@ -1,4 +1,8 @@
 module ProjectBookWorkspaceNavigation
+  def projectbook_todo_revision
+    @historical && @page ? @page.version.id : ''
+  end
+
   def projectbook_can_create
     @allow_editing
   end

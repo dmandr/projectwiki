@@ -20,7 +20,10 @@
     "mdast-util-from-markdown": "2.1.0",
     "mdast-util-to-markdown": "2.2.0",
     "mdast-util-frontmatter": "2.0.1",
-    "micromark-extension-frontmatter": "2.0.0"
+    "micromark-extension-frontmatter": "2.0.0",
+    "@mdxeditor/gurx": "1.2.4",
+    "@lexical/plain-text": "0.48.0",
+    "@lexical/history": "0.48.0"
   },
   "private": true
 }

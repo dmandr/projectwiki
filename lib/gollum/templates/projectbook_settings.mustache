@@ -1,10 +1,11 @@
 <main id="wiki-wrapper" class="pb-settings-page" aria-labelledby="projectbook-settings-title">
-  <div class="pb-settings-heading"><h1 id="projectbook-settings-title">Settings</h1><a class="btn btn-sm" href="{{base_url}}/Home">Back to book</a></div>
+  <div class="pb-settings-heading"><h1 id="projectbook-settings-title">Settings</h1></div>
   <p class="pb-settings-muted">For this deployment only. Settings are stored outside the book and are not synced through Git.</p>
   <nav class="pb-settings-tabs" role="tablist" aria-label="Settings sections">
     <a id="pb-semantic-tab" href="#semantic-search" role="tab" aria-selected="true" aria-controls="semantic-search">Semantic Search</a>
   </nav>
   <section id="semantic-search" role="tabpanel" aria-labelledby="pb-semantic-tab">
+  <p id="pb-settings-connection" role="status" aria-live="polite"></p>
   <p id="pb-settings-message" role="status" aria-live="polite"></p>
   <div class="pb-settings-columns">
   <form id="pb-settings-form">
@@ -46,7 +47,7 @@
 .pb-settings-explanation { margin-top:28px; max-width:700px; color:#63748a; font-size:13px; line-height:1.6; }
 .pb-settings-explanation summary { cursor:pointer; font-weight:600; color:#45566c; }
 .pb-settings-explanation p { margin-top:12px; }
-#pb-settings-message:empty { display:none; }
+#pb-settings-message:empty, #pb-settings-connection:empty { display:none; }
 #pb-settings-message { margin-bottom:16px; }
 .pb-settings-muted { color:#63748a; font-size:13px; line-height:1.5; margin:10px 0; }
 #pb-settings-fields { border:0; padding:0; margin-top:0; }
@@ -58,7 +59,7 @@
 .pb-settings-grid input, .pb-settings-grid select { padding:8px; border:1px solid #cbd5e1; border-radius:6px; background:white; width:100%; color:#273549; }
 .pb-settings-buttons { display:flex; flex-wrap:wrap; gap:8px; margin-top:18px; }
 #pb-settings-status { white-space:pre-line; font-size:14px; line-height:1.6; }
-#pb-settings-message { color:#8a4100; }
+#pb-settings-message, #pb-settings-connection { color:#8a4100; }
 @media(max-width:1100px) { .pb-settings-columns { grid-template-columns:1fr; } }
 @media(max-width:480px) { .pb-settings-grid { grid-template-columns:1fr; } }
 
@@ -68,11 +69,12 @@
   const form = document.getElementById('pb-settings-form');
   const fields = document.getElementById('pb-settings-fields');
   const message = document.getElementById('pb-settings-message');
+  const connection = document.getElementById('pb-settings-connection');
   const save = document.getElementById('pb-settings-save');
   const index = document.getElementById('pb-settings-index');
   const reload = document.getElementById('pb-settings-reload');
   const state = document.getElementById('pb-settings-status');
-  let baseline, version, editable = false, busy = false, timer;
+  let baseline, version, editable = false, busy = false, loading = false, timer;
   const endpoint = baseUrl + '/gollum/projectbook/settings';
   const booleans = ['enabled','auto_index','include_pdf'];
   const numbers = ['poll_seconds','batch_size','result_limit'];
@@ -87,28 +89,37 @@
     const s = data.status;
     if (!s) { state.textContent = data.message || 'Service not installed.'; return; }
     const report = s.report;
+    const duration = report ? Math.round(report.total_seconds) : 0;
     state.textContent = [s.state === 'disabled' ? 'Semantic search is disabled.' : 'Index: ' + s.state,
       'Model: ' + (s.model_loaded ? 'loaded' : s.model_cached ? 'downloaded, not loaded' : 'not downloaded'),
       s.phase === 'model_download_and_load' ? 'Downloading or loading the model…' : '',
       s.state === 'indexing' ? 'Processed files: ' + (s.processed_files || 0) + ' · Fragments: ' + (s.chunks || 0) : '',
       report ? 'Published index: ' + report.files_indexed + ' files · ' + report.chunks + ' fragments' : 'No published index yet.',
-      report ? 'Last build: ' + report.total_seconds + ' s · Files without indexed text: ' + report.errors.length : '',
+      report ? 'Last indexing duration: ' + Math.floor(duration / 60) + ' min ' + (duration % 60) + ' s' : '',
+      report?.finished_at ? 'Last indexed: ' + new Date(report.finished_at * 1000).toLocaleString() : '',
+      report ? 'Files without indexed text: ' + report.errors.length : '',
       s.indexed_revision ? 'Documents: ' + (s.stale ? 'index needs an update' : 'up to date') : '',
       s.error || ''].filter(Boolean).join('\n');
     document.getElementById('pb-settings-model').textContent = (s.model || '') + ' · CPU threads: ' + s.threads + '. Model and CPU/memory limits are deployment settings.';
     index.disabled = busy || !data.editable || !s.settings?.enabled || s.state === 'indexing';
   }
   async function load(reset = false) {
+    if (loading) return;
+    loading = true;
     try {
       const data = await api(); renderStatus(data);
-      if (reset) {
+      connection.textContent = '';
+      if (reset || !baseline) {
         editable = !!data.editable; fields.disabled = !editable; fields.hidden = !data.available;
         baseline = data.settings; version = data.version;
         if (baseline) Object.entries(baseline).forEach(([key,value]) => { if (booleans.includes(key)) form.elements[key].checked = value; else form.elements[key].value = value; });
         message.textContent = data.message || (!editable ? 'Viewing only. A deployment administrator can enable settings changes.' : '');
         buttons();
       }
-    } catch(error) { message.textContent = error.message; if (reset) { editable=false; fields.disabled=true; save.disabled=true; index.disabled=true; } }
+    } catch(error) {
+      connection.textContent = 'Cannot refresh settings. Retrying automatically; displayed status may be outdated. Your unsaved changes are kept.';
+      index.disabled = true;
+    } finally { loading = false; }
   }
   const startPolling = () => { clearInterval(timer); timer=setInterval(() => { if (!busy && !document.hidden) load(false); },5000); };
   load(true); startPolling();

@@ -25,9 +25,14 @@ module Gollum
       end
     end
 
-    def self.destination!(wiki, target)
+    def self.destination!(wiki, target, system_task: false)
       parts = target.split('/')
-      parts.each { |part| ProjectbookCreation.segment!(part) }
+      if system_task
+        identity = ProjectbookTasks.identity(target)
+        raise Error, 'Invalid system TODO path.' unless identity && target == ProjectbookTasks.path(*identity)
+      else
+        parts.each { |part| ProjectbookCreation.segment!(part) }
+      end
       raise Error, 'Keep a Markdown file extension.' unless Gollum::Page.format_for(target) == :markdown
       prefix = wiki.page_file_dir.to_s.sub(%r{/+\z}, '')
       revision = wiki.commit_for(wiki.ref)&.id
@@ -50,6 +55,20 @@ module Gollum
       target
     end
 
+    def self.delete_document(wiki, input, options)
+      raise Error.new('Editing is disabled.', 403) unless wiki.allow_editing
+      raise Error, 'Invalid delete request.' unless input.is_a?(Hash)
+      target = path!(input['path'])
+      page = wiki.page(target)
+      raise Error.new('The document was moved or deleted.', 404) unless page && page.url_path == target
+      raise Error, 'Only Markdown documents can be deleted here.' unless page.format == :markdown
+      raise Error.new('This document has changed. Reload and review it before deleting.', 412) unless input['etag'] == page.sha
+      disk_check!(wiki, target, page.text_data)
+      committer = Gollum::Committer.new(wiki, options.merge(message: "Delete #{target}"))
+      wiki.delete_page(page, committer: committer)
+      {path: target, commit: committer.commit}
+    end
+
     def self.save(wiki, input, uploads, options, dry_run: false)
       raise Error, 'Invalid save request.' unless input.is_a?(Hash)
       target = path!(input['path'])
@@ -67,6 +86,23 @@ module Gollum
         disk_check!(wiki, source, page.text_data)
         destination!(wiki, target) if target != source
       end
+      todo_changes = input.fetch('todos', [])
+      if todo_changes.is_a?(Array)
+        todo_changes = todo_changes.map do |item|
+          if item.is_a?(Hash) && item['kind'] == 'task' && item['expected_version'] == '' && !ProjectbookTasks.identity(target)
+            item.merge('source_path' => target)
+          else
+            item
+          end
+        end
+      end
+      if ProjectbookTasks.identity(source) || ProjectbookTasks.identity(target)
+        raise Error, 'TODO files have permanent paths. Change their title or list instead of moving them.' if source != target
+        data = ProjectbookTasks.parse(content, target).merge('expected_version' => input['create'] == true ? '' : input['etag'])
+        ProjectbookTasks.prepare(wiki, [data])
+      end
+      tasks = ProjectbookTasks.prepare(wiki, todo_changes)
+      raise Error, 'The same TODO cannot be edited twice in one save.' if tasks.any? { |item| item[:path] == target }
       files = input.fetch('attachments', [])
       raise Error, 'Invalid attachments.' unless files.is_a?(Array) && files.length <= 30 && uploads.is_a?(Array) && files.length == uploads.length
       raise Error.new('File uploads are disabled.', 403) if !files.empty? && !wiki.allow_uploads
@@ -87,7 +123,7 @@ module Gollum
         raise Error.new('Attachments exceed the limit: 20 MB per file, 50 MB per save.', 413) if temp.size > MAX_FILE || total > MAX_TOTAL
         [path, temp]
       end
-      unchanged = source == target && page && page.text_data == content && prepared.empty? && input['create'] != true
+      unchanged = source == target && page && page.text_data == content && prepared.empty? && tasks.empty? && input['create'] != true
       if dry_run
         return {path: target, content: content, previous_content: input['create'] == true ? '' : page.text_data, unchanged: !!unchanged}
       end
@@ -105,6 +141,7 @@ module Gollum
         committer.after_commit { |index, _| index.update_working_dir(page.path) }
       end
       prepared.each { |path, temp| wiki.write_file(path, ::File.binread(temp.path), commit) }
+      ProjectbookTasks.add(wiki, committer, tasks)
       {path: target, commit: committer.commit}
     end
   end

@@ -104,23 +104,23 @@ class ProjectbookMCPTest < Minitest::Test
     assert_equal @old, head
     ENV['PROJECTBOOK_MCP_DOCUMENT_WRITE'] = 'false'
     list = JSON.parse(rpc('tools/list').body).dig('result', 'tools')
-    refute list.any? { |t| %w[save_document edit_document].include?(t['name']) }
+    refute list.any? { |t| %w[save_document edit_document save_todos].include?(t['name']) }
     assert list.any? { |t| t['name'] == 'save_agent_note' }
-    %w[save_document edit_document].each do |name|
+    %w[save_document edit_document save_todos].each do |name|
       denied = JSON.parse(rpc('tools/call', {name: name, arguments: input}).body)
       assert denied['error']
     end
     ENV.delete('PROJECTBOOK_MCP_DOCUMENT_WRITE')
     Precious::App.set :wiki_options, {ref: 'main', allow_editing: false}
     list = JSON.parse(rpc('tools/list').body).dig('result', 'tools')
-    refute list.any? { |t| %w[save_document edit_document save_agent_note].include?(t['name']) }
+    refute list.any? { |t| %w[save_document edit_document save_todos save_agent_note].include?(t['name']) }
   end
   def test_protocol_discovery_resource_and_origin_guards
     response = rpc('initialize', {protocolVersion: '2025-03-26', capabilities: {}, clientInfo: {name: 'test', version: '1'}})
     assert_equal 200, response.status, response.body
     assert_equal 'projectbook', JSON.parse(response.body).dig('result', 'serverInfo', 'name')
     result = JSON.parse(rpc('tools/list').body).fetch('result')
-    assert_equal 13, result.fetch('tools').length
+    assert_equal 17, result.fetch('tools').length
     assert result['tools'].any? { |t| t['name'] == 'save_document' }
     response = rpc('resources/read', {uri: 'projectbook://book/context'})
     result = JSON.parse(response.body)

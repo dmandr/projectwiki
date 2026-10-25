@@ -17,6 +17,7 @@ require 'gollum/navigation_index'
 require 'gollum/projectbook_creation'
 require 'gollum/projectbook_titles'
 require 'gollum/projectbook_save'
+require 'gollum/projectbook_tasks'
 require 'gollum/projectbook_mcp'
 require 'gollum/projectbook_settings'
 
@@ -27,6 +28,7 @@ require 'gollum/views/template_cascade'
 
 require 'gollum/views/layout'
 require 'gollum/views/settings'
+require 'gollum/views/tasks'
 require 'gollum/views/missing'
 require 'gollum/views/attachment'
 require 'gollum/views/editable'
@@ -173,9 +175,58 @@ module Precious
     end
 
     namespace '/gollum' do
+      get '/tasks' do
+        cache_control :no_store
+        mustache :tasks
+      end
+
+      get '/projectbook/tasks' do
+        content_type :json
+        cache_control :no_store
+        begin
+          snapshot = Gollum::ProjectbookKnowledge.new(wiki_new, revision: params['revision'])
+          Gollum::ProjectbookTasks.catalog(snapshot, sources: true).merge(editable: @allow_editing && !params['revision']).to_json
+        rescue Gollum::ProjectbookCreation::Error => e
+          halt e.status, {error: e.message}.to_json
+        end
+      end
+
+      post '/projectbook/tasks' do
+        content_type :json
+        halt 403, {error: 'Use the TODO interface.'}.to_json unless request.env['HTTP_X_PROJECTWIKI_REQUEST'] == '1'
+        halt 403, {error: 'Cross-origin request rejected.'}.to_json if request.env['HTTP_ORIGIN'] && request.env['HTTP_ORIGIN'] != "#{request.scheme}://#{request.host_with_port}"
+        halt 415, {error: 'Expected JSON.'}.to_json unless request.media_type == 'application/json'
+        begin
+          input = JSON.parse(request.body.read(2 * 1024 * 1024 + 1))
+          raise Gollum::ProjectbookCreation::Error, 'Invalid TODO request.' unless input.is_a?(Hash)
+          Gollum::ProjectbookTasks.save(wiki_new, input['changes'], commit_options.merge(message: 'Update TODOs')).to_json
+        rescue JSON::ParserError
+          halt 422, {error: 'Invalid TODO JSON.'}.to_json
+        rescue Gollum::ProjectbookCreation::Error => e
+          halt e.status, {error: e.message}.to_json
+        end
+      end
+
       get '/settings' do
         cache_control :no_store
         mustache :settings
+      end
+
+      post '/projectbook/delete' do
+        content_type :json
+        halt 403, {error: 'Use the document editor.'}.to_json unless request.env['HTTP_X_PROJECTWIKI_REQUEST'] == '1'
+        halt 403, {error: 'Cross-origin request rejected.'}.to_json if request.env['HTTP_ORIGIN'] && request.env['HTTP_ORIGIN'] != "#{request.scheme}://#{request.host_with_port}"
+        halt 415, {error: 'Expected JSON.'}.to_json unless request.media_type == 'application/json'
+        begin
+          input = JSON.parse(request.body.read(8193))
+          result = Gollum::ProjectbookSave.delete_document(wiki_new, input, commit_options)
+          parent = result[:path].split('/')[0...-1].join('/')
+          result.merge(url: @base_url + '/gollum/overview' + (parent.empty? ? '' : '/' + Gollum::NavigationIndex.encode_path(parent) + '/')).to_json
+        rescue JSON::ParserError
+          halt 422, {error: 'Invalid delete request.'}.to_json
+        rescue Gollum::ProjectbookCreation::Error => e
+          halt e.status, {error: e.message}.to_json
+        end
       end
 
       post '/projectbook/save' do
@@ -629,6 +680,7 @@ module Precious
           @max_count = 10
           wiki       = wiki_new
           @results, @search_terms = wiki.search(@query)
+          @results.reject! { |result| result[:name].to_s.split('/').include?('.projectbook') }
         end
         mustache :search
       end

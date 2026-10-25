@@ -44,21 +44,11 @@
 	</div>
 
 
+	{{#historical}}
 	<div id="footer" class="pt-4">
-	  {{^historical}}
-		{{^preview}}
-		  <p id="last-edit"><div class="dotted-spinner hidden"></div> <a id="page-info-toggle" data-pagepath="{{path}}">{{tt.wiki_content.last_edit}}</a></p>
-		  {{#allow_editing}}
-		    <p>
-		      <a id="delete-link" href="{{escaped_url_path}}" data-confirm="{{tt.wiki_content.delete_link.confirm}}"><span>{{tt.wiki_content.delete_link.title}}</span></a>
-		    </p>
-	      {{/allow_editing}}
-		{{/preview}}
-	  {{/historical}}
-	  {{#historical}}
 	    <p>This version of the page was edited by <b>{{author}}</b> at <time datetime="{{datetime}}" data-format="{{date_format}}">{{date}}</time>. <a href="{{full_url_path}}">View the most recent version.</a></p>
-	  {{/historical}}
 	</div>
+	{{/historical}}
 
 
 </div>
