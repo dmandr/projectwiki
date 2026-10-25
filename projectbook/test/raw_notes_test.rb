@@ -45,7 +45,9 @@ class RawNotesTest < Minitest::Test
     end
     metadata_path=older['path'].sub('note.md','.note.json')
     meta=JSON.parse(wiki.file(metadata_path).raw_data);meta['created_at']='2026-10-25T12:00:00Z'
-    wiki.write_file(metadata_path,JSON.generate(meta),message:'Legacy timestamp')
+    committer=Gollum::Committer.new(wiki,message:'Legacy timestamp')
+    committer.add(metadata_path,JSON.generate(meta))
+    committer.after_commit { |index,_| index.update_working_dir(metadata_path) };committer.commit
     newer=nil
     Time.stub(:now,Time.utc(2026,10,25,12,0,0)+0.25) do
       newer=service.create(wiki,{'id'=>'33333333-3333-4333-8333-333333333333','title'=>'Later','text'=>'Размер: 23 mm — [reference](Home.md)','attachments'=>[upload]},{})
