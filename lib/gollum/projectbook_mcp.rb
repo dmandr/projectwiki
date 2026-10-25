@@ -82,7 +82,7 @@ module Gollum
           server.define_tool(name: name, description: description,
             meta: name == "create_raw_note" ? {"openai/fileParams" => ["files"]} : nil,
             input_schema: {type: 'object', properties: properties, required: required, additionalProperties: false},
-            annotations: {read_only_hint: !write, destructive_hint: document_write, idempotent_hint: true, open_world_hint: false}) do |server_context: nil, **arguments|
+            annotations: {read_only_hint: !write, destructive_hint: document_write, idempotent_hint: true, open_world_hint: name == 'create_raw_note'}) do |server_context: nil, **arguments|
             begin
               snapshot = ProjectbookKnowledge.new(wiki, revision: arguments.delete(:revision), base_url: ENV.fetch('PROJECTBOOK_PUBLIC_URL', ''))
               result = snapshot.public_send(name, **arguments)
@@ -114,7 +114,12 @@ module Gollum
             raise MCP::Server::RequestHandlerError.new(e.message, nil, error_code: -32602)
           end
         end
-        transport = MCP::Server::Transports::StreamableHTTPTransport.new(server, stateless: true, max_request_bytes: 3 * 1024 * 1024)
+        public_uri = URI(ENV.fetch('PROJECTBOOK_PUBLIC_URL', ''))
+        public_host = public_uri.host if %w[http https].include?(public_uri.scheme)
+        public_origin = public_host && "#{public_uri.scheme}://#{public_uri.host}#{public_uri.port == public_uri.default_port ? '' : ':' + public_uri.port.to_s}"
+        transport = MCP::Server::Transports::StreamableHTTPTransport.new(server, stateless: true,
+          allowed_hosts: public_host ? [public_host] : [], allowed_origins: public_origin ? [public_origin] : [],
+          max_request_bytes: 3 * 1024 * 1024)
         transport.call(env)
       end
 

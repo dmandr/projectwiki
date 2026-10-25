@@ -115,6 +115,15 @@ class ProjectbookMCPTest < Minitest::Test
     list = JSON.parse(rpc('tools/list').body).dig('result', 'tools')
     refute list.any? { |t| %w[save_document edit_document save_todos save_agent_note].include?(t['name']) }
   end
+  def test_configured_public_host_preserves_origin_guard
+    previous = ENV['PROJECTBOOK_PUBLIC_URL']
+    ENV['PROJECTBOOK_PUBLIC_URL'] = 'https://book.example.test'
+    assert_equal 200, rpc('tools/list', {}, 'HTTP_HOST' => 'book.example.test', 'HTTP_ORIGIN' => 'https://book.example.test').status
+    assert_equal 403, rpc('tools/list', {}, 'HTTP_HOST' => 'evil.example.test').status
+    assert_equal 403, rpc('tools/list', {}, 'HTTP_HOST' => 'book.example.test', 'HTTP_ORIGIN' => 'https://evil.example.test').status
+  ensure
+    previous ? ENV['PROJECTBOOK_PUBLIC_URL'] = previous : ENV.delete('PROJECTBOOK_PUBLIC_URL')
+  end
   def test_protocol_discovery_resource_and_origin_guards
     response = rpc('initialize', {protocolVersion: '2025-03-26', capabilities: {}, clientInfo: {name: 'test', version: '1'}})
     assert_equal 200, response.status, response.body
