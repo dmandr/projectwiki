@@ -482,3 +482,7 @@ in `.env` and running `docker compose up -d`; book and settings persist. Remove
 containers with `docker compose down` (without `-v`). On Mac disable auto-push:
 `launchctl bootout gui/$(id -u)/net.projectbook.book-push` and remove its LaunchAgent
 plist. Deleting containers does not delete the book.
+
+### Folder pages
+
+A folder can have editable Markdown content in `.index.md`. Its H1 supplies the tree label; the file is not shown as a separate node. New folders start with a dynamic `[Pages](#projectbook-pages)` block that can be removed without deleting children. Moving the overview moves its whole folder. Deleting it requires an unavoidable confirmation for the entire subtree. See [folder-page behavior](FOLDER_PAGES.md) and [verification](VERIFICATION.md).

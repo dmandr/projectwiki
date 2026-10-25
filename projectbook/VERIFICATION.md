@@ -333,3 +333,13 @@ Toolbar tooltips: all top-bar icons now show English action descriptions on hove
 - Real iPhone microphone/camera and ChatGPT file handoff remain user acceptance
   tests on HTTPS. Automatic transcription/video are not in this version.
 - Book backlog pushed; host auto-push reports success after new local commits.
+
+## Folder pages — 2026-10-25 integration verification
+
+- Final reserved name is `.index.md`. Built a dedicated local instance from committed application sources; the existing primary instance was not replaced.
+- Disposable browser book: New folder transliterated a Russian title into its path and opened the editor with H1 plus Pages marker. The empty folder rendered only its title. New document selected the current folder; its saved page appeared automatically in the dynamic Pages block.
+- Removed the Pages link in the visual editor and saved: the overview displayed only its heading while the child remained in the tree. Delete displayed the folder title/path and two-file subtree count. Cancel preserved both files; explicit confirmation removed both in one commit.
+- Found and fixed the root-folder deletion return URL: `/gollum/overview/` incorrectly entered the missing-document route. Root deletion now returns `/gollum/overview`, nested deletion returns the parent's directory overview. Added HTTP regressions for both targets.
+- Final server suite: 88 tests, 758 assertions, zero failures/errors. Editor JavaScript: 32 passing tests. RAG: 8 passing tests inside the dependency container (host Python lacks FastEmbed). RAG includes hidden overview pages without including other system files.
+- Separate migrated-book checks: all 18 pages render, local Markdown links resolve, seven original attachments retain their SHA-256, and all 13 task IDs/statuses/source references are preserved. MCP search, PDF page extraction and original attachment retrieval pass. No purchase tasks were added.
+- Private migration content, source snapshots and screenshots stay outside this public application repository.

@@ -102,4 +102,23 @@ class FolderPagesTest < Minitest::Test
     refute_includes Gollum::ProjectbookTree.read_order(wiki,''),'engine'
     assert_raises(Gollum::ProjectbookCreation::Error){Gollum::ProjectbookFolders.delete_preview(wiki,'')}
   end
+
+  def test_delete_http_returns_existing_parent_overview
+    create
+    response=post('/gollum/projectbook/folder-delete/confirm',
+      {folder:'engine',revision:head,confirmed_folder:'engine'})
+    assert_equal 200,response.status,response.body
+    target=JSON.parse(response.body).fetch('url')
+    assert_equal '/gollum/overview',target
+    assert_equal 200,@client.get(target).status
+
+    create('systems/engine')
+    write('systems/other.md',"# Other\n")
+    response=post('/gollum/projectbook/folder-delete/confirm',
+      {folder:'systems/engine',revision:head,confirmed_folder:'systems/engine'})
+    assert_equal 200,response.status,response.body
+    target=JSON.parse(response.body).fetch('url')
+    assert_equal '/gollum/overview/systems/',target
+    assert_equal 200,@client.get(target).status
+  end
 end

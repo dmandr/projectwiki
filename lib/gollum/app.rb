@@ -273,7 +273,7 @@ module Precious
           else halt 404
           end
           parent=Gollum::ProjectbookTree.parent(input['folder'])
-          result.merge(url:@base_url+'/gollum/overview/'+Gollum::NavigationIndex.encode_path(parent)).to_json
+          result.merge(url:@base_url+'/gollum/overview'+(parent.empty? ? '' : '/'+Gollum::NavigationIndex.encode_path(parent)+'/')).to_json
         rescue JSON::ParserError
           halt 422, {error:'Invalid JSON.'}.to_json
         rescue Gollum::ProjectbookCreation::Error => e
