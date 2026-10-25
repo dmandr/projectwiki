@@ -89,8 +89,8 @@ module Gollum
         path = entry[:path].sub('.note.json','note.md')
         doc = snapshot.entries.find { |e| e[:path] == path }
         next unless doc
-        meta.merge('path'=>path,'url'=>snapshot.url(path),'version'=>entry[:sha], 'document_version'=>doc[:sha], 'title'=>ProjectbookTitles.title(snapshot.text(doc),path))
-      end.sort_by { |item| item['created_at'] }.reverse
+        meta.merge('path'=>path,'url'=>snapshot.url(path),'version'=>entry[:sha], 'document_version'=>doc[:sha], 'title'=>ProjectbookTitles.title(snapshot.text(doc),path), 'excerpt'=>snapshot.text(doc).sub(/\A# [^\n]*\n/, '').gsub(/!?\[([^\]]*)\]\([^)]*\)/) { $1.start_with?('photo-', 'voice-') ? '' : $1 }.gsub(/\s+/, ' ').strip[0,280])
+      end.sort_by { |item| Time.iso8601(item['created_at']) }.reverse
     end
     def self.create(wiki, input, options)
       raise Error.new('Editing is disabled.',403) unless wiki.allow_editing
@@ -131,7 +131,7 @@ module Gollum
       prepared.each do |_,_,mime,name|
         body += "\n#{mime.start_with?('image/') ? '!' : ''}[#{name}](media/#{name})\n"
       end
-      meta = {'schema'=>1,'id'=>id,'created_at'=>now.iso8601,'source'=>input['source'] == 'mcp' ? 'mcp' : 'web','status'=>'unsorted','results'=>[], 'fingerprint'=>fingerprint,
+      meta = {'schema'=>1,'id'=>id,'created_at'=>now.iso8601(6),'source'=>input['source'] == 'mcp' ? 'mcp' : 'web','status'=>'unsorted','results'=>[], 'fingerprint'=>fingerprint,
         'attachments'=>prepared.map { |path,bytes,mime,name| {'path'=>path,'name'=>name,'mime_type'=>mime,'bytes'=>bytes.bytesize} }}
       writes = prepared.map { |path,bytes,*_| [path,bytes] } + [[folder+'/note.md',body],[folder+'/.note.json',JSON.pretty_generate(meta)+"\n"]]
       ProjectbookSave.destination!(wiki,folder+'/note.md')

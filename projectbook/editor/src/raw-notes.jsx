@@ -33,8 +33,8 @@ function Capture(){
  useEffect(()=>{draftStore('get',key).then(d=>{if(d){setDraft(d);setNotice('Restored your local draft.');}}).catch(()=>setLocal('Browser draft storage is unavailable. Keep this tab open.')).finally(()=>setReady(true));return()=>{if(recorder.current?.state==='recording')recorder.current.stop();stream.current?.getTracks().forEach(t=>t.stop());};},[]);
  useEffect(()=>{if(!ready||saved.current)return;saveQueue.current=saveQueue.current.catch(()=>{}).then(()=>draftStore('put',key,draft)).then(()=>setLocal('Draft saved on this device · not yet in the book')).catch(()=>setLocal('Draft could not be stored. Keep this tab open.'));},[draft,ready]);
  useEffect(()=>{const warn=e=>{if(!saved.current&&(latest.current.text||latest.current.files.length||recorder.current?.state==='recording')){e.preventDefault();e.returnValue='';}};window.addEventListener('beforeunload',warn);return()=>window.removeEventListener('beforeunload',warn);},[]);
- function append(item){if(item.blob.size>20*1024*1024){setNotice('File exceeds 20 MiB. Choose a smaller file.');return;}setDraft(d=>({...d,files:[...d.files,{...item,upload_id:crypto.randomUUID()}]}));}
- async function addFiles(event){const files=[...event.target.files];event.target.value='';setBusy(true);setNotice('Preparing attachments…');try{for(const file of files){if(!/^(image|audio)\//.test(file.type)&&!(/\.heic$/i.test(file.name)))throw Error('Only photos and audio are supported.');append(await photo(file,original));}setNotice('');}catch(e){setNotice(e.message);}finally{setBusy(false);}}
+ function append(item){if(item.blob.size>20*1024*1024){setNotice('File exceeds 20 MiB. Choose a smaller file.');return;}setDraft(d=>({...d,files:[{...item,upload_id:crypto.randomUUID()},...d.files]}));}
+ async function addFiles(event){const files=[...event.target.files];event.target.value='';setBusy(true);setNotice('Preparing attachments…');try{for(const file of files){const audioTypes={m4a:'audio/mp4',mp3:'audio/mpeg',wav:'audio/wav',ogg:'audio/ogg',webm:'audio/webm'};const type=file.type||audioTypes[file.name.split('.').pop().toLowerCase()]||'';if(!/^(image|audio)\//.test(type)&&!(/\.heic$/i.test(file.name)))throw Error('Only photos and audio are supported.');append(await photo(type!==file.type?new File([file],file.name,{type}):file,original));}setNotice('');}catch(e){setNotice(e.message);}finally{setBusy(false);}}
  async function record(){
  if(recording){recorder.current.stop();return;}
  try{
@@ -60,14 +60,48 @@ function Capture(){
   setNotice('Saving note and attachments to the book…');const result=await api('create',{id:draft.id,title:draft.title,text:draft.text,attachments});saved.current=true;await saveQueue.current;await draftStore('delete',key);location.href=result.url;
  }catch(e){setNotice(e.message+' Your draft is kept; you can retry.');}finally{setBusy(false);}}
  if(!ready)return <p>Restoring draft…</p>;
- return <section className="raw-capture"><div className="raw-heading"><h1>New raw note</h1><a href={base+'/gollum/raw-notes'}>Raw Notes</a></div><p>Capture now. Organize later.</p><fieldset disabled={busy}><label>Title <span>(optional)</span><input value={draft.title} maxLength={200} placeholder="Date and time if left blank" onChange={e=>setDraft({...draft,title:e.target.value})}/></label><label>Text<textarea rows={5} value={draft.text} placeholder="Comments, measurements, observations…" onChange={e=>setDraft({...draft,text:e.target.value})}/></label><div className="raw-tools"><button type="button" className="btn" onClick={record}>{recording?'■ Stop recording':'● Record voice'}</button><label className="btn">Camera<input type="file" accept="image/*" capture="environment" onChange={addFiles}/></label><label className="btn">Add photos / audio<input type="file" accept="image/*,audio/*" multiple onChange={addFiles}/></label></div><label className="raw-original"><input type="checkbox" checked={original} onChange={e=>setOriginal(e.target.checked)}/> Keep original photos (otherwise resize to 2048 px)</label><div className="raw-media">{draft.files.map(f=><figure key={f.upload_id}><Media item={f}/><figcaption>{f.name} · {(f.blob.size/1024).toFixed(0)} KiB {f.warning&&<span>{f.warning}</span>}</figcaption><button type="button" className="btn" onClick={()=>setDraft(d=>({...d,files:d.files.filter(a=>a.upload_id!==f.upload_id)}))}>Remove</button></figure>)}</div><button type="button" className="btn btn-primary" disabled={recording||(!draft.text.trim()&&!draft.files.length)} onClick={save}>Save to Unsorted</button></fieldset><p className="raw-local">{local}</p><p role="status">{notice}</p></section>;
+ return <section className="raw-capture">
+  <div className="raw-heading"><h1>New raw note</h1><a href={base+'/gollum/raw-notes'}>Raw Notes</a></div>
+  <p>Capture now. Organize later. New attachments appear first.</p>
+  <fieldset disabled={busy}>
+   <label>Title <span>(optional)</span><input value={draft.title} maxLength={200} placeholder="Date and time if left blank" onChange={e=>setDraft({...draft,title:e.target.value})}/></label>
+   <label>Text<textarea rows={4} value={draft.text} placeholder="Comments, measurements, observations…" onChange={e=>setDraft({...draft,text:e.target.value})}/></label>
+   <div className="raw-media" aria-label="Note attachments, newest first">{draft.files.map(f=><figure key={f.upload_id}><Media item={f}/><figcaption>{f.name} · {(f.blob.size/1024).toFixed(0)} KiB {f.warning&&<span>{f.warning}</span>}</figcaption><button type="button" className="btn" aria-label={'Remove '+f.name} onClick={()=>setDraft(d=>({...d,files:d.files.filter(a=>a.upload_id!==f.upload_id)}))}>Remove</button></figure>)}</div>
+   <div className="raw-add"><h2>Add to this note</h2>
+    <div className="raw-tools">
+     <button type="button" className="btn" aria-pressed={recording} onClick={record}>{recording?'■ Stop recording':'● Record voice'}</button>
+     <label className="btn">Take photo<input aria-label="Take photo" type="file" accept="image/*" capture="environment" onChange={addFiles}/></label>
+     <label className="btn">Photo library<input aria-label="Photo library" type="file" accept="image/*" multiple onChange={addFiles}/></label>
+     <label className="btn">Audio file<input aria-label="Audio file" type="file" accept="audio/*,.m4a,.mp3,.wav,.ogg,.webm" multiple onChange={addFiles}/></label>
+    </div>
+    <label className="raw-original"><input type="checkbox" checked={original} onChange={e=>setOriginal(e.target.checked)}/> Keep original photos (otherwise resize to 2048 px)</label>
+    <p className="raw-hint">Photos and audio only. Your device provides the file picker; video is not supported yet.</p>
+   </div>
+   <button type="button" className="btn btn-primary raw-save" disabled={recording||(!draft.text.trim()&&!draft.files.length)} onClick={save}>Save to Unsorted</button>
+  </fieldset><p className="raw-local">{local}</p><p role="status" aria-live="polite">{notice}</p>
+ </section>;
 }
 function Inbox(){
  const [items,setItems]=useState([]),[filter,setFilter]=useState('unsorted'),[error,setError]=useState(''),[editable,setEditable]=useState(false);
  async function load(){try{const data=await api();setItems(data.items);setEditable(data.editable);}catch(e){setError(e.message);}}
  useEffect(()=>{load();},[]);
  async function status(item){try{await api('status',{id:item.id,expected_version:item.version,status:item.status==='processed'?'unsorted':'processed',results:item.results});await load();}catch(e){setError(e.message);}}
- return <section className="raw-inbox"><div className="raw-heading"><h1>Raw Notes</h1>{editable&&<a className="btn btn-primary" href={base+'/gollum/raw-notes/new'}>＋ New raw note</a>}</div><div className="raw-tools" role="group" aria-label="Note status">{['unsorted','processed','all'].map(value=><button className="btn" aria-pressed={value===filter} key={value} onClick={()=>setFilter(value)}>{value[0].toUpperCase()+value.slice(1)}</button>)}</div><p role="status">{error}</p>{items.filter(n=>filter==='all'||n.status===filter).map(note=><article key={note.id}><h2><a href={note.url}>{note.title}</a></h2><p>{new Date(note.created_at).toLocaleString()} · {note.attachments.length} attachments · {note.source}</p>{note.attachments.find(f=>f.mime_type.startsWith('image/'))&&<img loading="lazy" alt="Photo preview" src={base+'/'+note.attachments.find(f=>f.mime_type.startsWith('image/')).path.split('/').map(encodeURIComponent).join('/')}/>} {editable&&<button className="btn" onClick={()=>status(note)}>{note.status==='processed'?'Return to Unsorted':'Mark processed'}</button>}</article>)}{!items.some(n=>filter==='all'||n.status===filter)&&<p>No {filter==='all'?'':filter} notes yet.</p>}</section>;
+ const mediaURL=path=>base+'/'+path.split('/').map(encodeURIComponent).join('/');
+ const filtered=items.filter(n=>filter==='all'||n.status===filter);
+ return <section className="raw-inbox">
+  <div className="raw-heading"><h1>Raw Notes</h1></div>
+  <div className="raw-tools" role="group" aria-label="Note status">{['unsorted','processed','all'].map(value=><button className="btn" aria-pressed={value===filter} key={value} onClick={()=>setFilter(value)}>{value[0].toUpperCase()+value.slice(1)}</button>)}</div>
+  <p className="raw-hint">Newest notes first</p><p role="status">{error}</p>
+  {filtered.map(note=><article key={note.id}>
+   <header><h2><a href={note.url}>{note.title}</a></h2><time dateTime={note.created_at}>{new Date(note.created_at).toLocaleString()}</time></header>
+   {note.excerpt&&<p className="raw-excerpt">{note.excerpt}</p>}
+   <div className="raw-gallery">{note.attachments.filter(f=>f.mime_type.startsWith('image/')).slice(0,4).map(f=><a key={f.path} href={note.url} aria-label={'Open '+note.title}><img loading="lazy" alt={f.name} src={mediaURL(f.path)}/></a>)}</div>
+   {note.attachments.filter(f=>f.mime_type.startsWith('audio/')).map(f=><audio key={f.path} aria-label={f.name} src={mediaURL(f.path)} controls preload="none"/>)}
+   <footer><a href={note.url}>Open note{note.attachments.length?' · '+note.attachments.length+' attachments':''}</a>{editable&&<button className="btn" onClick={()=>status(note)}>{note.status==='processed'?'Return to Unsorted':'Mark processed'}</button>}</footer>
+  </article>)}
+  {!filtered.length&&<p>No {filter==='all'?'':filter} notes yet.</p>}
+  {editable&&<a className="btn btn-primary raw-new" href={base+'/gollum/raw-notes/new'}>＋ New raw note</a>}
+ </section>;
 }
 const mount=document.getElementById('projectbook-raw-notes');if(mount)createRoot(mount).render(location.pathname.endsWith('/new')?<Capture/>:<Inbox/>);
 // Keep ordinary Markdown download links; add a native player beside audio links.

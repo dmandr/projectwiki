@@ -429,6 +429,11 @@ and hidden `.note.json`. One local Git commit contains the complete note.
 Unsorted/Processed is metadata, not a directory move. The ordinary editor can
 edit the saved Markdown. Inbox: `/gollum/raw-notes`.
 
+Capture shows newest attachments first, with the add controls below the media.
+Separate Take photo, Photo library, Record voice and Audio file controls avoid a
+mixed image/audio picker. iOS still owns its native picker choices. The inbox is
+a newest-first feed with text excerpts, up to four image previews and audio players.
+
 Photos default to JPEG, maximum long edge 2048 px, quality .85; choose original
 quality before attaching for diagrams/labels. Unsupported image decoding keeps
 the original with a notice. Original HEIC rendering depends on the browser.
@@ -449,7 +454,8 @@ MCP: `upload_raw_note_attachment`, `create_raw_note`, `list_raw_notes`,
 and private addresses/redirects rejected. Other clients can upload byte chunks.
 No implicit access to chat attachments: the client must supply file objects or
 bytes. No real ChatGPT file-picker integration or real iPhone test is claimed by
-local protocol tests.
+local protocol tests. The user confirmed the initial mobile capture works on iPhone.
+See [the transcription proposal](TRANSCRIPTION.md) for the next optional service.
 
 ### Container-only cloud deployment and automatic book push
 

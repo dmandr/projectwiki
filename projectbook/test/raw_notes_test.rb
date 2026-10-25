@@ -38,6 +38,23 @@ class RawNotesTest < Minitest::Test
     assert_raises(service::Error){service.create(wiki,input.merge('text'=>'Changed'),{})}
     assert_equal 'unsorted',snapshot.read_raw_note(id:ID)['status']
   end
+  def test_feed_newest_first_excerpt_and_attachment_order
+    older=nil
+    Time.stub(:now,Time.utc(2026,10,25,12,0,0)) do
+      older=service.create(wiki,{'id'=>ID,'title'=>'Earlier','text'=>'Original note'},{})
+    end
+    metadata_path=older['path'].sub('note.md','.note.json')
+    meta=JSON.parse(wiki.file(metadata_path).raw_data);meta['created_at']='2026-10-25T12:00:00Z'
+    wiki.write_file(metadata_path,JSON.generate(meta),message:'Legacy timestamp')
+    newer=nil
+    Time.stub(:now,Time.utc(2026,10,25,12,0,0)+0.25) do
+      newer=service.create(wiki,{'id'=>'33333333-3333-4333-8333-333333333333','title'=>'Later','text'=>'Размер: 23 mm — [reference](Home.md)','attachments'=>[upload]},{})
+    end
+    items=snapshot.list_raw_notes[:items]
+    assert_equal [newer['id'],older['id']],items.map{|n|n['id']}
+    assert_equal 'Размер: 23 mm — reference',items.first['excerpt']
+    refute_includes items.first['excerpt'],'photo-01'
+  end
   def test_chunks_checksums_and_validation_never_partial_commit
     service.upload(wiki,upload_id:UP,offset:0,data:Base64.strict_encode64('abc'))
     assert_equal 3,service.upload(wiki,upload_id:UP,offset:0,data:Base64.strict_encode64('abc'))[:next_offset]

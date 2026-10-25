@@ -10,6 +10,12 @@ scp "$here/compose.yaml" "$here/nginx.conf" "$here/watch-push.py" "$host:/opt/pr
 ssh "$host" bash -s -- "$image" "$book" <<'REMOTE'
 set -euo pipefail
 cd /opt/projectbook
+# Pause application writes during Git synchronization; preserve browser drafts.
+previous_container="$(docker ps -q --filter 'name=^projectbook-cloud-wiki-1$')"
+if [ -n "$previous_container" ]; then
+  docker stop "$previous_container" >/dev/null
+  trap 'docker start "$previous_container" >/dev/null || true' ERR
+fi
 if [ ! -d book/.git ]; then git clone "$2" book; fi
 git -c safe.directory=/opt/projectbook/book -C book status --short
 git -c safe.directory=/opt/projectbook/book -C book diff --quiet
@@ -43,4 +49,5 @@ systemctl enable projectbook-book-push.service
 systemctl restart projectbook-book-push.service
 docker compose up -d --wait --wait-timeout 180
 docker compose ps
+trap - ERR
 REMOTE
