@@ -6,7 +6,7 @@ book="${3:?Book Git remote required}"
 [[ "$image" =~ ^[a-zA-Z0-9./:_-]+$ && "$book" =~ ^[a-zA-Z0-9./:@_-]+$ ]] || exit 1
 here="$(cd "$(dirname "$0")" && pwd)"
 ssh "$host" 'mkdir -p /opt/projectbook'
-scp "$here/compose.yaml" "$here/nginx.conf" "$here/watch-push.py" "$host:/opt/projectbook/"
+scp "$here/compose.yaml" "$here/compose.rag.yaml" "$here/nginx.conf" "$here/watch-push.py" "$host:/opt/projectbook/"
 ssh "$host" bash -s -- "$image" "$book" <<'REMOTE'
 set -euo pipefail
 cd /opt/projectbook

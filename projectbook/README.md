@@ -568,3 +568,20 @@ without the ignore rule retains Git synchronization until explicitly disabled.
 Cloud settings remain read-only unless the deployment explicitly sets
 `PROJECTBOOK_SETTINGS_ADMIN=true`. Enable this only for an access-controlled
 instance whose admitted users may change settings. The Compose default is false.
+
+### Cloud semantic search
+
+Build `projectbook/deploy/build-rag-image.sh linux/amd64`, transfer the resulting
+image with `send-image.sh`, and install `deploy/compose.rag.yaml` beside the cloud
+Compose file. In the server `.env` set `PROJECTBOOK_RAG_IMAGE` to that image and
+`COMPOSE_FILE=compose.yaml:compose.rag.yaml`; then `docker compose up -d --wait`.
+The RAG and Qdrant ports remain private. Book files mount read-only; model, state
+and vectors have separate persistent volumes. Settings → Semantic Search controls
+enabling, PDF parsing, automatic index updates and batch size. Local ignored notes
+are excluded. Markdown and shared `.asset/<UUID>/*.pdf` blobs are indexed.
+
+Cloud defaults are one model thread, batch size one, 768 MiB for the indexer and
+256 MiB for Qdrant. Measure actual memory/index throughput on the target; increase
+limits only when the host has room. To remove the sidecars, use the overlay to
+stop/remove `rag` and `qdrant`, set `COMPOSE_FILE=compose.yaml`, then recreate wiki.
+Keep the generated volumes for a later restart; book data is unaffected.

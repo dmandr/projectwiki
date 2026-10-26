@@ -101,7 +101,8 @@ def entries(revision):
             continue
         parts = path.split('/')
         folder_page = len(parts) > 1 and parts[-1] == '.index.md' and not any(p.startswith(('.', '_')) for p in parts[:-1])
-        if any(p.startswith(('.', '_')) for p in parts) and not folder_page:
+        shared_pdf = bool(re.fullmatch(r'\.asset/[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}/[^/]+\.pdf', path, re.IGNORECASE))
+        if any(p.startswith(('.', '_')) for p in parts) and not (folder_page or shared_pdf):
             continue
         ext = Path(path).suffix.lower()
         if ext not in ('.md', '.markdown', '.pdf'):

@@ -1,0 +1,36 @@
+# Optional cloud sidecars. Activate with COMPOSE_FILE=compose.yaml:compose.rag.yaml.
+services:
+  wiki:
+    environment:
+      PROJECTBOOK_RAG_URL: http://rag:8090
+  qdrant:
+    image: qdrant/qdrant:v1.20.0@sha256:9bfc89f9914fc14876a88c05270685921a55b8877b254a98bcc1cc2f0a424cd2
+    volumes: [rag-vectors:/qdrant/storage]
+    networks: [book]
+    mem_limit: ${PROJECTBOOK_QDRANT_MEMORY:-256m}
+    cpus: '${PROJECTBOOK_QDRANT_CPUS:-0.5}'
+    restart: unless-stopped
+  rag:
+    image: ${PROJECTBOOK_RAG_IMAGE:?Set a versioned RAG image}
+    environment:
+      BOOK_DIR: /book
+      BOOK_REF: main
+      QDRANT_URL: http://qdrant:6333
+      MODEL_NAME: sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
+      MODEL_THREADS: '${PROJECTBOOK_RAG_THREADS:-1}'
+      RAG_ENABLED: '${PROJECTBOOK_RAG_ENABLED:-true}'
+      BATCH_SIZE: '${PROJECTBOOK_RAG_BATCH_SIZE:-1}'
+      POLL_SECONDS: '${PROJECTBOOK_RAG_POLL_SECONDS:-60}'
+    volumes:
+      - ./book:/book:ro
+      - rag-models:/models
+      - rag-state:/state
+    networks: [book]
+    mem_limit: ${PROJECTBOOK_RAG_MEMORY:-768m}
+    cpus: '${PROJECTBOOK_RAG_CPUS:-1}'
+    depends_on: [qdrant]
+    restart: unless-stopped
+volumes:
+  rag-vectors:
+  rag-models:
+  rag-state:

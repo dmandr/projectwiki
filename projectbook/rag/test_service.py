@@ -12,6 +12,12 @@ from tokenizers import Tokenizer, models, pre_tokenizers
 
 
 class RetrievalTests(unittest.TestCase):
+    def test_shared_pdf_entries_without_other_hidden_files(self):
+        paths=['Home.md','.asset/11111111-1111-4111-8111-111111111111/manual.pdf','.projectbook/private.pdf','.asset/invalid/manual.pdf','.asset/11111111-1111-4111-8111-111111111111/image.png']
+        tree=b''.join(('100644 blob '+'a'*40+' 10\t'+p+'\0').encode() for p in paths)
+        with patch.object(service,'git',return_value=tree):
+            self.assertEqual(paths[:2],[e['path'] for e in service.entries('revision')])
+
     def test_generations_reuse_cache_remove_deleted_files_and_retain_index_on_failure(self):
         import numpy as np
         from qdrant_client import QdrantClient
