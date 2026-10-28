@@ -1,0 +1,33 @@
+name: projectbook-cloudflare-preview
+services:
+  manager:
+    build: ..
+    image: projectbook-manager:cloudflare-preview
+    container_name: projectbook-manager-cloudflare-preview
+    entrypoint: [python, /tests/cloudflare_preview.py]
+    ports: ['127.0.0.1:8072:8070', '127.0.0.1:8073:8071']
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - preview-state:/data
+      - fixture-git:/run/git:ro
+      - .:/tests:ro
+    environment:
+      PYTHONPATH: /app:/tests
+      MANAGER_IMAGE: projectbook-manager:cloudflare-preview
+      BOOK_IMAGE: projectwiki:local
+      RAG_IMAGE: projectbook-fork-rag:latest
+      GIT_HOSTS: github.com,git-fixture
+      GIT_CREDENTIAL_VOLUME: projectbook-manager-git
+      ADMIN_PUBLIC_URL: http://127.0.0.1:8072
+      MCP_PUBLIC_URL: http://127.0.0.1:8073/mcp
+    networks: [books]
+networks:
+  books:
+    external: true
+    name: projectbook-manager-books
+volumes:
+  preview-state:
+    name: projectbook-manager-cloudflare-preview-state
+  fixture-git:
+    external: true
+    name: projectbook-manager-git

@@ -1,0 +1,51 @@
+name: projectbook-manager
+services:
+  manager:
+    build: .
+    image: ${MANAGER_IMAGE:-projectbook-manager:local}
+    init: true
+    restart: unless-stopped
+    ports:
+      - '127.0.0.1:${MANAGER_ADMIN_PORT:-8070}:8070'
+      - '127.0.0.1:${MANAGER_MCP_PORT:-8071}:8071'
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - manager-state:/data
+      - git-credentials:/run/git:ro
+      - cloudflare-credentials:/run/cloudflare:ro
+      - github-credentials:/run/github
+    environment:
+      MANAGER_IMAGE: ${MANAGER_IMAGE:-projectbook-manager:local}
+      BOOK_IMAGE: ${BOOK_IMAGE:-projectwiki:local}
+      RAG_IMAGE: ${RAG_IMAGE:-projectbook-rag:local}
+      QDRANT_IMAGE: ${QDRANT_IMAGE:-qdrant/qdrant:v1.20.0}
+      MANAGER_AUTH: ${MANAGER_AUTH:-cloudflare}
+      ACCESS_ISSUER: ${ACCESS_ISSUER:-}
+      ADMIN_AUDIENCE: ${ADMIN_AUDIENCE:-}
+      MCP_AUDIENCE: ${MCP_AUDIENCE:-}
+      ADMIN_PUBLIC_URL: ${ADMIN_PUBLIC_URL:-http://127.0.0.1:8070}
+      MCP_PUBLIC_URL: ${MCP_PUBLIC_URL:-http://127.0.0.1:8071/mcp}
+      GIT_HOSTS: ${GIT_HOSTS:-github.com}
+      GIT_CREDENTIAL_VOLUME: projectbook-manager-git
+      BOOK_MEMORY: ${BOOK_MEMORY:-768m}
+      RAG_MEMORY: ${RAG_MEMORY:-1536m}
+      CF_ACCOUNT_ID: ${CF_ACCOUNT_ID:-}
+      CF_ZONE_ID: ${CF_ZONE_ID:-}
+      CF_TUNNEL_ID: ${CF_TUNNEL_ID:-}
+      CF_MCP_APP_ID: ${CF_MCP_APP_ID:-}
+      CF_BASE_DOMAIN: ${CF_BASE_DOMAIN:-dmandr.net}
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
+      GITHUB_OWNER: ${GITHUB_OWNER:-}
+    networks: [books]
+networks:
+  books:
+    name: projectbook-manager-books
+volumes:
+  manager-state:
+    name: projectbook-manager-state
+  git-credentials:
+    name: projectbook-manager-git
+  cloudflare-credentials:
+    name: projectbook-manager-cloudflare
+  github-credentials:
+    name: projectbook-manager-github

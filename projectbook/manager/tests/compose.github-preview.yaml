@@ -1,0 +1,41 @@
+name: projectbook-github-preview
+services:
+  remote:
+    image: projectbook-manager:github-preview
+    container_name: projectbook-github-remote
+    entrypoint: [python, /tests/github_remote.py]
+    healthcheck:
+      test: [CMD, python, -c, "import socket; socket.create_connection(('127.0.0.1', 443), timeout=2).close()"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    volumes: ['.:/tests:ro', 'remote-repos:/repos', 'fixture-certs:/certs']
+    networks:
+      books:
+        aliases: [github.com]
+  manager:
+    image: projectbook-manager:github-integration
+    container_name: projectbook-manager-github-preview
+    entrypoint: [python, /tests/github_preview.py]
+    depends_on:
+      remote:
+        condition: service_healthy
+    ports: ['127.0.0.1:8074:8070', '127.0.0.1:8075:8071']
+    volumes: ['/var/run/docker.sock:/var/run/docker.sock', 'preview-state:/data', '.:/tests:ro']
+    environment:
+      PYTHONPATH: /app:/tests
+      MANAGER_IMAGE: projectbook-manager:github-integration
+      BOOK_IMAGE: projectwiki:local
+      BOOK_NETWORK: projectbook-github-preview-books
+      GIT_HOSTS: github.com
+      ADMIN_PUBLIC_URL: http://127.0.0.1:8074
+      MCP_PUBLIC_URL: http://127.0.0.1:8075/mcp
+    networks: [books]
+networks:
+  books:
+    name: projectbook-github-preview-books
+volumes:
+  preview-state:
+    name: projectbook-manager-github-preview-state
+  remote-repos:
+  fixture-certs:

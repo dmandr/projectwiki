@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Project Book</title><link rel="stylesheet" href="/style.css"><script src="/app.js" defer></script></head>
+<body>
+<header><a class="brand" href="/"><span class="mark">PB</span> Project Book</a><span id="connection" class="muted">Connecting…</span></header>
+<main>
+  <section class="intro"><div><p class="eyebrow">YOUR WORKSPACE</p><h1>A home for every book.</h1><p class="muted">Independent repositories. One connection for your agent.</p></div><div class="actions"><button id="manage-people" class="quiet">People</button><button id="new-book">+ New book</button></div></section>
+  <section class="connection"><div><span class="dot"></span><strong>Shared MCP</strong><code id="mcp-url">Loading…</code></div><button id="copy-mcp" class="quiet">Copy address</button></section>
+  <p id="notice" role="status" hidden></p>
+  <p id="cloudflare-status" class="hint"></p>
+  <section id="github-panel" class="connection" hidden><div><strong>GitHub</strong><span id="github-status" class="hint"></span></div><button id="connect-github" class="quiet">Connect GitHub</button></section>
+  <section id="create-panel" class="panel" hidden>
+    <div class="section-title"><h2>Create a book</h2><button id="close-create" class="quiet" aria-label="Close new book form">Close</button></div>
+    <form id="create-form">
+      <div class="fields"><label>Book name<input name="name" placeholder="Trinity" maxlength="100" required></label><label id="manual-address">Public web address<input name="url" type="url" placeholder="https://boat.example.com" required></label><label id="automatic-address" hidden>Book address<div class="domain-input"><input name="subdomain" placeholder="my-book" pattern="[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?" maxlength="63" autocomplete="off"><span id="base-domain">.dmandr.net</span></div><button id="check-address" class="quiet" type="button">Check availability</button><span id="address-result" role="status" class="hint"></span></label><label>Git repository<input name="repo" placeholder="owner/repository or Git URL" required></label></div>
+      <fieldset id="create-users-label" class="users-field" hidden><legend>People with access</legend><div id="create-people" class="people-picker"></div><p class="hint">Select people who can read and edit this book. Add names and email addresses in People first.</p></fieldset>
+      <div class="form-bottom"><label class="check"><input name="indexing" type="checkbox" checked> Enable semantic search</label><button type="submit">Create book</button></div>
+      <p id="repository-help" class="hint">The repository must already exist. Private repositories use the server’s Git credentials.</p><button id="check-repository" class="quiet" type="button" hidden>Check GitHub access</button><p id="repository-result" class="hint" role="status"></p>
+    </form>
+  </section>
+  <div class="section-title books-heading"><h2>Books <span id="book-count" class="count">0</span></h2><label class="check muted"><input id="show-removed" type="checkbox"> Show removed</label></div>
+  <section id="books" aria-live="polite"></section>
+  <footer>Cloudflare handles sign-in. Each book keeps its own Git history and storage.</footer>
+</main>
+<dialog id="remove-dialog"><form id="remove-form"><p class="eyebrow">REMOVE INSTALLATION</p><h2 id="remove-title"></h2><p>Writing will stop. All book changes, including local Raw Notes, will be committed and pushed to Git before the containers are removed.</p><p>If saving fails, removal stops. Storage volumes are retained for recovery.</p><label>Type the book name to confirm<input id="remove-confirm" autocomplete="off" required></label><p id="remove-error" class="error" role="alert"></p><div class="dialog-actions"><button type="button" id="cancel-remove" class="quiet">Cancel</button><button type="submit" class="danger">Save to Git & remove</button></div></form></dialog>
+<dialog id="users-dialog"><form id="users-form"><p class="eyebrow">BOOK ACCESS</p><h2 id="users-title"></h2><fieldset class="users-field"><legend>People with access</legend><div id="edit-people" class="people-picker"></div></fieldset><p>Access applies to this book only, in the browser and shared MCP. Saving signs users out of this book so Cloudflare can check the updated policy.</p><p id="users-error" class="error" role="alert"></p><div class="dialog-actions"><button type="button" id="cancel-users" class="quiet">Cancel</button><button type="submit">Save access</button></div></form></dialog>
+<dialog id="people-dialog"><div class="section-title"><h2>People <span id="people-count" class="count"></span></h2><button id="close-people" class="quiet">Close</button></div><p>A shared list for all books. Adding someone here does not grant access until you select them for a book. Cloudflare handles sign-in.</p><div id="people-list"></div><form id="person-form"><label>Name<input name="name" maxlength="100" required placeholder="Name"></label><label>Email<input name="email" type="email" required placeholder="person@example.com"></label><p id="people-error" class="error" role="alert"></p><div class="dialog-actions"><button type="submit">Add person</button></div></form></dialog>
+</body></html>
