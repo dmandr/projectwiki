@@ -20,7 +20,7 @@ USER root
 WORKDIR /opt/projectbook-source
 RUN apk add --no-cache poppler-utils nodejs
 COPY --from=native /usr/local/bundle/ /usr/local/bundle/
-RUN gem install simpleidn:0.3.0 hana:1.3.7 json_schemer:2.5.0 mcp:1.8.1 --ignore-dependencies --no-document
+RUN gem install simpleidn:0.3.0 hana:1.3.7 json_schemer:2.5.0 mcp:1.8.1 jwt:3.3.0 --ignore-dependencies --no-document
 COPY . .
 RUN ruby projectbook/verify-runtime.rb \
     && gem build gollum.gemspec \

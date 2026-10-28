@@ -39,6 +39,7 @@ Gem::Specification.new do |s|
   s.add_dependency 'webrick', '~> 1.7'
   s.add_dependency 'i18n', '~> 1.8'
   s.add_dependency 'mcp', '= 1.8.1'
+  s.add_dependency 'jwt', '= 3.3.0'
 
   s.add_development_dependency 'rack-test', '~> 0.6.3'
   s.add_development_dependency 'shoulda', '~> 3.6.0'
@@ -92,6 +93,7 @@ Gem::Specification.new do |s|
     lib/gollum/projectbook_knowledge.rb
     lib/gollum/projectbook_attachments.rb
     lib/gollum/projectbook_mcp.rb
+    lib/gollum/projectbook_access.rb
     lib/gollum/projectbook_callouts.rb
     lib/gollum/projectbook_tree.rb
     lib/gollum/projectbook_move.rb

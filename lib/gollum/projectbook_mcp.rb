@@ -1,6 +1,7 @@
 require 'mcp'
 require 'rack/utils'
 require 'gollum/projectbook_knowledge'
+require 'gollum/projectbook_access'
 
 module Gollum
   module ProjectbookMCP
@@ -60,13 +61,16 @@ module Gollum
     class Endpoint
       def initialize(app, settings)
         @app, @settings = app, settings
+        @access = ProjectbookAccess.new
       end
 
       def call(env)
         return @app.call(env) unless env['PATH_INFO'] == '/mcp'
         return reject(404, 'MCP disabled') if ENV['PROJECTBOOK_MCP_ENABLED'] == 'false'
         token = ENV.fetch('PROJECTBOOK_MCP_TOKEN', '')
-        unless token.empty? || Rack::Utils.secure_compare(env['HTTP_AUTHORIZATION'].to_s, "Bearer #{token}")
+        anonymous = token.empty? && !@access.enabled?
+        bearer = !token.empty? && Rack::Utils.secure_compare(env['HTTP_AUTHORIZATION'].to_s, "Bearer #{token}")
+        unless anonymous || bearer || @access.authorized?(env)
           return [401, {'content-type' => 'application/json', 'www-authenticate' => 'Bearer'}, [JSON.generate(error: 'Unauthorized')]]
         end
         wiki = Gollum::Wiki.new(@settings.gollum_path, @settings.wiki_options)
