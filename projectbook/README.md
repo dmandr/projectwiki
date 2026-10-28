@@ -241,6 +241,7 @@ Deployment settings (export in ignored `projectbook/settings.local.sh`):
 - `PROJECTBOOK_MCP_MEMORY_WRITE=false` disables agent-note writes.
 - `PROJECTBOOK_MCP_DOCUMENT_WRITE=false` disables document writes. Set both flags to false for read-only MCP, or use `GOLLUM_READ_ONLY=true` to disable writes in both MCP and Web UI.
 - `PROJECTBOOK_MCP_TOKEN` optionally requires `Authorization: Bearer ...`; leave credentials out of Git. For Codex, configure `bearer_token_env_var` with a token-bearing environment variable available to the client. Do not put a token into a URL.
+- `PROJECTBOOK_MCP_ACCESS_ENABLED=true` additionally accepts signed Cloudflare Access assertions. Set `PROJECTBOOK_MCP_ACCESS_ISSUER` to your HTTPS `*.cloudflareaccess.com` team issuer and `PROJECTBOOK_MCP_ACCESS_AUDIENCE` to the MCP Access application AUD. Access policies determine which users are admitted; there is no duplicate local email allowlist. The server validates RS256 signature, issuer, audience, expiry and identity claims using cached HTTPS public keys. Missing/invalid assertions fail closed, including when no static token is set. Existing static Bearer access and write flags remain applicable. Configure Managed OAuth on the Access application for OAuth clients; the opaque OAuth token itself is not an origin JWT.
 - The default test deployment binds only to Mac loopback and has no token. The SDK validates Host/Origin; arbitrary browser origins are rejected. Do not change the bind address to publish this test configuration.
 
 MCP runs in the same process and outer write lock as the Web UI. Document and memory writes therefore share the UI's validation/write serialization. This does not lock external Git commands/other processes; no concurrent external writers are supported yet. Read tools pin a Git revision and do not checkout old commits. Pass that revision to later pages of a result to keep a consistent snapshot. Only book-root deployments (`page_file_dir` empty) are supported in this first version.
@@ -580,8 +581,12 @@ and vectors have separate persistent volumes. Settings → Semantic Search contr
 enabling, PDF parsing, automatic index updates and batch size. Local ignored notes
 are excluded. Markdown and shared `.asset/<UUID>/*.pdf` blobs are indexed.
 
-Cloud defaults are one model thread, batch size one, 768 MiB for the indexer and
+Cloud defaults are one model thread, batch size one, 896 MiB for the indexer and
 256 MiB for Qdrant. Measure actual memory/index throughput on the target; increase
 limits only when the host has room. To remove the sidecars, use the overlay to
 stop/remove `rag` and `qdrant`, set `COMPOSE_FILE=compose.yaml`, then recreate wiki.
 Keep the generated volumes for a later restart; book data is unaffected.
+
+The cloud profile disables the ONNX CPU memory arena and caps each PDF extraction
+worker at 128 MiB of address space. Complex PDFs may fail extraction at this limit;
+inspect the index report before increasing `PROJECTBOOK_PDF_MEMORY_MB`.

@@ -156,33 +156,38 @@ def load_model():
         except (FileNotFoundError, OSError):
             location = snapshot_download(**args)
         STATUS['model_download_seconds'] = round(time.perf_counter() - started, 3)
-        MODEL_INSTANCE = TextEmbedding(model_name=MODEL, specific_model_path=location, threads=THREADS, providers=['CPUExecutionProvider'])
+        MODEL_INSTANCE = TextEmbedding(model_name=MODEL, specific_model_path=location, threads=THREADS, providers=['CPUExecutionProvider'], enable_cpu_mem_arena=os.getenv('RAG_LOW_MEMORY', 'false') != 'true')
         STATUS['model_load_seconds'] = round(time.perf_counter() - started, 3)
     return MODEL_INSTANCE
 
 
 def embedding_inputs(model, pieces, title):
-    # The model-specific tokenizer enforces the budget, including context prefix.
-    # Decode token windows to prevent FastEmbed's default truncation losing source text.
+    # Reuse the large multilingual tokenizer under the same lock as inference.
+    # Serializing/cloning it per file can briefly consume hundreds of MiB.
     tokenizer = model.model.tokenizer
     result = []
-    from tokenizers import Tokenizer
-    splitter = Tokenizer.from_str(tokenizer.to_str())
-    splitter.no_truncation(); splitter.no_padding()
-    for piece in pieces:
-        prefix = (title + ' / ' + piece['heading'])[:120] + '\n'
-        # Independent tokenizer copy avoids mutating the model's inference settings.
-        ids = splitter.encode(piece['text'], add_special_tokens=False).ids
-        prefix_ids = splitter.encode(prefix, add_special_tokens=False).ids[:32]
-        prefix = splitter.decode(prefix_ids) + '\n'
-        budget = max(32, min(128, (tokenizer.truncation or {}).get('max_length', 128)) - len(prefix_ids) - 4)
-        for offset in range(0, len(ids), max(1, budget - 16)):
-            subtext = splitter.decode(ids[offset:offset + budget])
-            if subtext.strip():
-                # Original text remains in payload for exact quotation; token window for embedding only.
-                result.append((dict(piece), prefix + subtext))
-            if offset + budget >= len(ids):
-                break
+    with model_slot():
+        truncation, padding = tokenizer.truncation, tokenizer.padding
+        budget_limit = min(128, (truncation or {}).get('max_length', 128))
+        tokenizer.no_truncation(); tokenizer.no_padding()
+        try:
+            for piece in pieces:
+                prefix = (title + ' / ' + piece['heading'])[:120] + '\n'
+                ids = tokenizer.encode(piece['text'], add_special_tokens=False).ids
+                prefix_ids = tokenizer.encode(prefix, add_special_tokens=False).ids[:32]
+                prefix = tokenizer.decode(prefix_ids) + '\n'
+                budget = max(32, budget_limit - len(prefix_ids) - 4)
+                for offset in range(0, len(ids), max(1, budget - 16)):
+                    subtext = tokenizer.decode(ids[offset:offset + budget])
+                    if subtext.strip():
+                        result.append((dict(piece), prefix + subtext))
+                    if offset + budget >= len(ids):
+                        break
+        finally:
+            if truncation: tokenizer.enable_truncation(**truncation)
+            else: tokenizer.no_truncation()
+            if padding: tokenizer.enable_padding(**padding)
+            else: tokenizer.no_padding()
     return result
 
 

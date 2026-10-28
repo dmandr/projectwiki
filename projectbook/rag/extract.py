@@ -1,5 +1,6 @@
 """Bounded PDF worker. Reads only a temporary Git blob, never active book paths."""
 import json
+import os
 import resource
 import sys
 import subprocess
@@ -49,6 +50,7 @@ def extract(path):
 
 
 if __name__ == '__main__':
-    resource.setrlimit(resource.RLIMIT_AS, (1024**3, 1024**3))
+    limit = max(128, min(1024, int(os.getenv("PDF_MEMORY_MB", "1024")))) * 1024**2
+    resource.setrlimit(resource.RLIMIT_AS, (limit, limit))
     resource.setrlimit(resource.RLIMIT_CPU, (100, 100))
     print(json.dumps(extract(sys.argv[1]), ensure_ascii=False))

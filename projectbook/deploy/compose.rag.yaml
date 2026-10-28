@@ -17,6 +17,8 @@ services:
       BOOK_REF: main
       QDRANT_URL: http://qdrant:6333
       MODEL_NAME: sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
+      RAG_LOW_MEMORY: 'true'
+      PDF_MEMORY_MB: '${PROJECTBOOK_PDF_MEMORY_MB:-128}'
       MODEL_THREADS: '${PROJECTBOOK_RAG_THREADS:-1}'
       RAG_ENABLED: '${PROJECTBOOK_RAG_ENABLED:-true}'
       BATCH_SIZE: '${PROJECTBOOK_RAG_BATCH_SIZE:-1}'
@@ -26,7 +28,7 @@ services:
       - rag-models:/models
       - rag-state:/state
     networks: [book]
-    mem_limit: ${PROJECTBOOK_RAG_MEMORY:-768m}
+    mem_limit: ${PROJECTBOOK_RAG_MEMORY:-896m}
     cpus: '${PROJECTBOOK_RAG_CPUS:-1}'
     depends_on: [qdrant]
     restart: unless-stopped

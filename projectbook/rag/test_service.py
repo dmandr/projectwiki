@@ -80,6 +80,15 @@ class RetrievalTests(unittest.TestCase):
         self.assertTrue(all(len(p['text']) <= 450 for p in pieces))
         self.assertIn('двигатель', pieces[-1]['text'])
 
+    def test_tokenizer_configuration_is_restored_after_failure(self):
+        tokenizer=Tokenizer(models.WordLevel({'[UNK]':0,'word':1},unk_token='[UNK]'))
+        tokenizer.enable_truncation(max_length=64);tokenizer.enable_padding(length=64)
+        before=(tokenizer.truncation,tokenizer.padding)
+        model=SimpleNamespace(model=SimpleNamespace(tokenizer=tokenizer))
+        with self.assertRaises(KeyError):
+            service.embedding_inputs(model,[{'heading':'missing text'}],'title')
+        self.assertEqual(before,(tokenizer.truncation,tokenizer.padding))
+
     def test_token_windows_do_not_drop_tail_or_exceed_budget(self):
         tokenizer = Tokenizer(models.WordLevel({'[UNK]': 0, 'word': 1, 'tail': 2}, unk_token='[UNK]'))
         tokenizer.pre_tokenizer = pre_tokenizers.Whitespace()
