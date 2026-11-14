@@ -85,6 +85,7 @@ def update(manager,b):
         deadline=time.monotonic()+120
         while time.monotonic()<deadline:
             obj=manager.owned(b,name)
+            if obj['Config']['Image']!=target:raise Problem('Unexpected image while checking update.',503)
             health=obj['State'].get('Health',{}).get('Status')
             if not obj['State']['Running'] or health=='unhealthy':raise Problem('Updated Wiki failed its health check.',503)
             try:

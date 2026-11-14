@@ -103,7 +103,7 @@ class Docker:
 
 
 class Manager:
-    def __init__(self, folder='/data', docker=None):
+    def __init__(self, folder='/data', docker=None, recover_operations=False):
         self.registry = Registry(folder)
         self.docker = docker or Docker()
         self.active = set()
@@ -116,7 +116,7 @@ class Manager:
         from github_auth import GitHub
         self.github = GitHub(self.registry)
         # Interrupted work is recoverable and never silently treated as successful.
-        for b in self.registry.books():
+        for b in self.registry.books() if recover_operations else []:
             if b.get('action') in ('update','update_book') and b['state'] not in ('ready','removed','error'):
                 from updates import recover
                 recover(self,b)

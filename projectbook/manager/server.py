@@ -248,7 +248,7 @@ def handler(manager, gateway, auth, kind):
 
 if __name__ == '__main__':
     auth = Auth()
-    manager = Manager(os.environ.get('MANAGER_DATA', '/data'))
+    manager = Manager(os.environ.get('MANAGER_DATA', '/data'),recover_operations=True)
     threading.Thread(target=manager.sync_loop, daemon=True).start()
     gateway = Gateway(manager)
     admin = ThreadingHTTPServer(('0.0.0.0', 8070), handler(manager, gateway, auth, 'admin'))

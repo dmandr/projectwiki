@@ -70,7 +70,7 @@ class LifecycleTests(unittest.TestCase):
 
     def test_interrupted_operation_is_not_reported_ready(self):
         self.m.registry.update(self.book['id'], state='saving', action='remove')
-        m = Manager(self.temp.name, self.docker)
+        m = Manager(self.temp.name, self.docker, recover_operations=True)
         self.assertEqual(m.registry.get(self.book['id'])['failed_action'], 'remove')
         self.assertEqual(m.registry.get(self.book['id'])['state'], 'error')
 

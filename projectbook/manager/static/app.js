@@ -1,6 +1,6 @@
 const $ = selector => document.querySelector(selector);
 let versions = {}, versionError = "", books = [], mcpUrl = '', removing = null, lastRender = '', busy = false, cf = {}, editingUsers = null, people = [], gh = {};
-const states = {preparing_repository:"Preparing GitHub repository",protecting:'Protecting address',publishing:'Publishing address',updating_access:'Updating access',updating:'Updating Wiki',queued:'Queued',cloning:'Cloning repository',starting:'Starting services',ready:'Ready',saving:'Saving to Git',removing:'Removing',removed:'Removed',error:'Needs attention'};
+const states = {preparing_repository:"Preparing GitHub repository",protecting:'Protecting address',publishing:'Publishing address',updating_access:'Updating access',updating:'Updating book',queued:'Queued',cloning:'Cloning repository',starting:'Starting services',ready:'Ready',saving:'Saving to Git',removing:'Removing',removed:'Removed',error:'Needs attention'};
 function el(tag, cls, text) { const node = document.createElement(tag); if(cls)node.className=cls;if(text!==undefined)node.textContent=text;return node; }
 async function api(path, data) { const response = await fetch(path, data===undefined ? {} : {method:'POST',headers:{'Content-Type':'application/json','X-ProjectBook-Request':'1'},body:JSON.stringify(data)});const value=await response.json();if(!response.ok)throw Error(value.error||'Request failed');return value; }
 function notice(message) { $('#notice').textContent=message;$('#notice').hidden=!message; }

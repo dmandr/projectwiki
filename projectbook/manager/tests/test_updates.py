@@ -4,7 +4,7 @@ import updates
 
 class UpdatesTest(unittest.TestCase):
     def manager(self):
-        m=Mock();m.labels.return_value=[];m.name.return_value='wiki';m.owned.return_value={'Image':'sha256:old','Config':{'Image':'old:tag','Env':['TOKEN=secret']},'HostConfig':{'Binds':['book:/wiki']},'State':{'Running':True,'Health':{'Status':'healthy'}}};m.rpc.return_value={'result':{}};return m
+        m=Mock();m.labels.return_value=[];m.name.return_value='wiki';m.owned.return_value={'Image':'sha256:old','Config':{'Image':'ghcr.io/dmandr/projectbook@sha256:new','Env':['TOKEN=secret']},'HostConfig':{'Binds':['book:/wiki']},'State':{'Running':True,'Health':{'Status':'healthy'}}};m.rpc.return_value={'result':{}};return m
     def release(self):return {'image':'ghcr.io/dmandr/projectbook@sha256:new','revision':'a'*40,'version':'a'*12,'configs':{'amd64':'sha256:new'}}
     @patch('updates.docker_api')
     @patch('updates.latest')
