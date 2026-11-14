@@ -234,6 +234,10 @@ def handler(manager, gateway, auth, kind):
                     if b['state'] != 'error':
                         raise Problem('Retry is available only after an error.', 409)
                     action = b.get('failed_action', 'install')
+                    if action == 'update_book':
+                        from updates import latest
+                        roles=['wiki']+(['rag'] if b.get('indexing') else [])
+                        manager.registry.update(b['id'],update_targets={role:latest(role)['image'] for role in roles})
                 manager.start(b['id'], action)
                 self.send(202, manager.public(manager.registry.get(b['id'])))
             except Problem as error:
