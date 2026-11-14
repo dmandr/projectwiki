@@ -118,3 +118,50 @@ docker run --rm -v "$PWD:/work:ro" -w /work --entrypoint python projectbook-mana
 `tests/git_remote.py` и `tests/integration.py` — отдельный локальный HTTPS Git fixture и интеграционный сценарий. Использовать только на тестовом Manager: fixture добавляется в `GIT_HOSTS`, сертификат — в его тестовый credentials volume. Сценарий создаёт две книги, проверяет MCP discovery/read/write/resources/attachments, CSRF, отсутствие admin API на MCP-порту, отказ push, retry, сохранение uncommitted/ignored Raw Notes и удаление контейнера с сохранением volume. Оставляет тестовую Alpha для просмотра; Beta видна в Show removed.
 
 Проверено 28 октября 2026 в локальном Docker: модульные проверки и полный интеграционный сценарий прошли; индекс Alpha достиг ready. На облачном образе прошли 19 модульных проверок, браузерный вход в админку, публичный OAuth challenge и discovery MCP. Полный OAuth-сеанс нового MCP-клиента пока не проверен; локальная проверка JWT не заменяет этот сеанс.
+
+## RAG memory safety (Linux cloud hosts)
+
+RAG is optional. A failure to start search does not prevent the book from starting; the manager reports `indexing_error`. The default is one active managed RAG worker across managers on the host. A worker previously killed by OOM is not automatically started again. RAG and Qdrant have no automatic restart, bounded CPU, hard memory limits (896 MiB and 256 MiB), and no swap allowance.
+
+Before deploying on a systemd/cgroup v2 Docker host, run `../deploy/install-rag-memory-guard.sh` as root. It installs the persistent `projectbookrag.slice`: **1280 MiB total** for all books' RAG and Qdrant containers, a 1152 MiB reclaim threshold, no swap, and one CPU total. `compose.cloud.yaml` mounts the host cgroup counters read-only and requires this guard. Startup refuses a missing/unbounded guard, a host smaller than the pool plus 2048 MiB reserved for other workloads, or insufficient currently available memory. This budget protects against RAG growth; other unbounded applications can still exhaust the host independently.
+
+The Docker driver must be `systemd` with cgroup v2. The cloud Compose sidecars also use this slice. Keep the same parent for every search deployment; independent per-container limits alone do not bound the sum across books. Local Docker Desktop installations use the normal manager Compose file without the Linux cloud overlay.
+
+Existing containers must be recreated to change their cgroup parent. The deployment helper `../deploy/migrate-rag-memory-guard.py` accepts explicit ProjectBook RAG/Qdrant names, preserves every data volume and retains the old stopped containers. It stores private inspection snapshots under `/opt/projectbook/backups/memory-guard` (never add these snapshots to Git). Set `SAFE_RAG_IMAGE` to the tested image. Qdrant restarts; RAG remains stopped until inspected and explicitly started. Run this only after installing the slice and loading the image. A failure retains the original container and volumes. Application book containers are not recreated by this helper.
+
+Validation: `python3 ../deploy/test-rag-memory-guard.py IMAGE` on the Docker host creates a temporary 96 MiB child slice and two allocation workers, each individually allowed 128 MiB. It verifies aggregate OOM confinement, a surviving sentinel outside the child slice, and disabled automatic restarts, then removes only its test containers and transient unit. This intentionally triggers a small test OOM; it does not use book volumes. On the cloud server this check passed on 29 October 2026. All real search containers were moved into the shared slice; the updated Trinity worker initially used about 709 MiB without OOM. Other workers remain stopped until scheduled within capacity.
+
+Recovery: inspect the worker's `State.OOMKilled`, logs, and the slice's `memory.events`. Do not turn on unconditional restarts or raise limits to make an error disappear. Fix the memory demand or schedule fewer workers, then recreate/start the affected worker manually. Search indexes are disposable; book, model and state volumes are retained. Restarting Docker/the host does not automatically start these optional workers. A future scheduler can queue indexing or share one embedding service across books; this version refuses excess concurrent workers instead.
+
+### Automatic book synchronization
+
+Ready books now fetch and exchange committed changes every 60 seconds (`BOOK_SYNC_INTERVAL`, minimum 30 seconds). The Manager uses its existing GitHub OAuth credential flow and a short-lived Git helper per book. Removed books are excluded. The book card shows the last successful revision or synchronization error.
+
+Sync only fast-forwards a clean working tree; it never auto-commits files, stashes changes, force-pushes, or merges diverged histories. Ignored Raw Notes remain local, including when a fetched commit would otherwise overwrite an ignored file. A divergence or dirty worktree is retained and reported for manual resolution. Fetch/push failures retry next cycle.
+
+Both the wiki middleware and helper use `.git/projectbook-sync.lock`. HTTP/MCP writes take an exclusive lock; reads take a shared lock. The helper locks worktree inspection and fast-forward, while network fetch/push run outside the lock. Arbitrary external Git commands must use the same lock. Deploy the lock-capable wiki image before enabling the Manager loop.
+
+The standalone installation uses `../deploy/projectbook-book-sync.service` and `.timer`, running the same helper with its existing host SSH key mounted read-only. Adapt the book/key paths and image tag for another host. Enable the timer only after a successful one-shot run, and disable the old push-only watcher. Git credentials and inspection backups must never enter source control.
+
+On 4 November 2026 both active cloud Trinity installations were upgraded. Manager pulled 10 commits by fast-forward, bringing both copies to the same remote revision. The old application images/containers and private deployment config backups were retained for rollback. Registry publishing and a user-facing container Update action are still separate planned work.
+
+## Persistent RAG on larger hosts
+
+Set `RAG_PERSISTENT=true`, `RAG_MAX_ACTIVE=0` (no worker-count cap),
+`RAG_LOW_MEMORY=false`, `RAG_MEMORY=4g`, `QDRANT_MEMORY=1g`,
+`RAG_CPUS=4`, `QDRANT_CPUS=2`, `RAG_MODEL_THREADS=4`,
+`RAG_BATCH_SIZE=16`, `RAG_PDF_MEMORY_MB=512`. Leave `RAG_CGROUP_PARENT`
+empty and `RAG_REQUIRE_CGROUP=false`. These are deployment settings; small-host
+defaults remain unchanged. Workers and Qdrant stay running and restart with Docker.
+Memory limits still apply per container, not across all books: size capacity
+for the total number of books. Existing workers must be recreated with their
+existing volumes to apply environment changes; preserve any saved RAG settings.
+
+Set `RESOURCE_LIMITS_ENABLED=false` to disable book/RAG/Qdrant memory and CPU
+limits and the RAG capacity/shared-cgroup checks. The limiting functionality is
+retained and enabled by default. Existing limited containers must be recreated
+with their original volumes to remove limits (Docker update with zero does not
+clear previously configured limits). The admin-only `/api/resources` endpoint
+shows host memory/swap and Docker container CPU/memory/process statistics, cached
+for 10 seconds. The main UI refreshes every 15 seconds while visible. Docker's
+memory denominator is host RAM when no container limit is set.

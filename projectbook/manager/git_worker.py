@@ -1,4 +1,5 @@
 """Short-lived helper; only the selected book volume and Git credentials are mounted."""
+from book_sync import sync_book
 import json
 import os
 from pathlib import Path
@@ -103,7 +104,11 @@ if __name__ == '__main__':
                 fd = os.open('/run/git/oauth.json', os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
                 with os.fdopen(fd, 'w') as f:
                     json.dump(value, f)
-            result = clone(sys.argv[2]) if sys.argv[1] == 'clone' else save()
+            action = sys.argv[1]
+            if action == 'clone': result = clone(sys.argv[2])
+            elif action == 'sync': result = sync_book(git)
+            elif action == 'save': result = save()
+            else: raise RuntimeError('Unknown Git action')
             print(json.dumps(result))
     except Exception as error:
         print(json.dumps({'error': str(error) if isinstance(error, RuntimeError) else type(error).__name__}))

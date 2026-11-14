@@ -590,3 +590,46 @@ Keep the generated volumes for a later restart; book data is unaffected.
 The cloud profile disables the ONNX CPU memory arena and caps each PDF extraction
 worker at 128 MiB of address space. Complex PDFs may fail extraction at this limit;
 inspect the index report before increasing `PROJECTBOOK_PDF_MEMORY_MB`.
+
+### Cloud RAG resource guard
+
+Install `deploy/install-rag-memory-guard.sh` on a systemd/cgroup v2 Docker host before using the cloud RAG overlay. The overlay puts RAG and Qdrant in a shared 1280 MiB slice, limits individual containers, disables swap and automatic restarts. This aggregate limit must be shared by all book installations. See `manager/README.md` for migration, OOM validation, admission checks and recovery. Keep `PROJECTBOOK_RAG_CGROUP_PARENT=projectbookrag.slice`; do not remove the guard to work around an indexing failure.
+
+### MCP structure operations
+
+See [MCP moves and tree order](mcp-structure.md) for `get_tree_order`, `move_document`, `reorder_tree`, preview/apply semantics, tests and the isolated review instance.
+
+### Enter behavior in the visual editor
+
+Settings → Editor offers two keyboard layouts: Enter creates a paragraph (default), or Enter creates a hard line break. Cmd+Enter on macOS / Ctrl+Enter elsewhere performs the other action; Shift+Enter always creates a hard line break. The choice is saved for this browser and site, not in the Git book. Existing documents are not rewritten. Markdown stores a hard break as a backslash followed by a newline and paragraphs as blank-line separators. Markdown source mode and code editors retain their normal key handling.
+
+### Inline TODOs (review build)
+
+Tasks are defined in their source documents, with no UUIDs or task metadata files:
+
+```markdown
+Before [TODO: Change oil]() and [todo: Inspect filter](tags=spring,engine).
+[TODO: Buy supplies](done=2026-11-03T11:22,tags=spring)
+
+:::todos
+tags: spring, engine
+match: any
+status: open
+:::
+```
+
+Each occurrence is independent, including copies with identical text. `TODO` is case-insensitive. An absent `done` means open; a completion timestamp means done. Tags are comma-separated; spaces and reserved characters in metadata are percent-encoded. The visual editor shows the checkbox and text, hiding metadata. Select tasks and use the tag icon to add/remove tags in bulk; mixed tags are left unchanged unless explicitly toggled. List blocks are queries, not definitions. In edit mode their saved-data preview is read-only; on the saved page, a checkbox updates the source document.
+
+The derived index is cached in memory and rebuilt when source blob SHAs change. It stores path, UTF-8 byte offset, line and source version, not persistent IDs. Writes require the matching source SHA; stale selections fail instead of guessing. Code examples are excluded. MCP `list_tasks`, `read_todo` and `save_todos` expose the same source locations and version checks. Create tasks through document editing. Moving documents preserves TODO metadata.
+
+Migrate a clean isolated clone first using the built image (mount this script at `/migrate.rb`):
+
+```sh
+docker run --rm --entrypoint ruby -e GOLLUM_REF=main \
+  -v /absolute/book-copy:/wiki \
+  -v /absolute/projectwiki/projectbook/deploy/migrate-inline-todos.rb:/migrate.rb:ro \
+  projectwiki:REVIEW /migrate.rb /wiki
+# Add --apply after /wiki only after inspecting the preview.
+```
+
+Migration makes one Git commit and never pushes. Keep a remote backup branch first. Every legacy reference becomes an independent inline definition, list names become tags, and list references become query blocks. Unreferenced tasks and legacy notes/due dates are retained in `todo-migration-recovered.md`. Completion timestamps use the Git commit that last set the legacy done field, not an invented exact completion time. Legacy metadata files disappear from the current tree but remain in history. Do not merge the migration into a branch served by an old app version. Roll back app and book versions together, preserving any newer user edits first.

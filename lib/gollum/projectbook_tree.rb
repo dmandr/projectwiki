@@ -64,7 +64,7 @@ module Gollum
         write_order(wiki, committer, folder, names + [name])
       end
     end
-    def self.apply(wiki, input, options)
+    def self.apply(wiki, input, options, dry_run: false)
       raise Error.new('Editing is disabled.', 403) unless wiki.allow_editing
       raise Error, 'Invalid tree operation.' unless input.is_a?(Hash)
       snapshot = ProjectbookKnowledge.new(wiki)
@@ -85,13 +85,14 @@ module Gollum
         raise Error, 'Invalid insertion point.' unless before.nil? || (before.is_a?(String) && names.include?(before) && before != name)
         result = names - [name]
         result.insert(before ? result.index(before) : result.length, name)
-        return {revision: snapshot.revision, unchanged: true} if result == names
+        return {revision: snapshot.revision, path: folder, order: result, previous_order: names, dry_run: dry_run, unchanged: result == names} if dry_run || result == names
         committer = Gollum::Committer.new(wiki, options.merge(message: "Reorder #{folder.empty? ? 'book root' : folder}"))
         write_order(wiki, committer, folder, result)
-        {revision: committer.commit, order: result}
+        {revision: committer.commit, path: folder, order: result, dry_run: false}
       elsif input['action'] == 'move'
         target = [folder, ::File.basename(source)].reject(&:empty?).join('/')
         plan = ProjectbookMove.prepare(wiki, source: source, target: target, revision: input['revision'], etag: input['etag'])
+        return ProjectbookMove.preview(plan).merge(dry_run: true) if dry_run
         ProjectbookMove.apply(wiki, plan, options)
       else
         raise Error, 'Choose move or reorder.'

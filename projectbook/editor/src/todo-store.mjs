@@ -47,15 +47,18 @@ export function todoStore({base='', staged=false, revision='', onChange=()=>{}, 
       finally {update({busy:false});}
     },
     focusTask: id=>update({focusId:id}),
-    async newTask() {
+    async newTasks(titles=['TODO']) {
       if (!state.editable || state.busy) return null;
+      if(!titles.length || titles.some(title=>!title.trim() || [...title.trim()].length>200 || /[\x00-\x1f\x7f]/.test(title)))throw new Error('Each TODO must contain 1–200 characters on one line. Shorten the selected text first.');
+      if(pending.length+titles.length+1>100)throw new Error('Save the document before adding more TODOs (maximum 100 pending changes).');
       const list=[...state.lists,...pending.filter(item=>item.kind==='list')].find(item=>item.title.toLowerCase()==='default') ||
         {kind:'list',id:crypto.randomUUID(),title:'Default',expected_version:''};
-      const task={kind:'task',id:crypto.randomUUID(),title:'TODO',list_id:list.id,status:'open',expected_version:''};
-      const changes=list.version || pending.some(item=>item.id===list.id) ? [task] : [list,task];
+      const tasks=titles.map(title=>({kind:'task',id:crypto.randomUUID(),title,list_id:list.id,status:'open',expected_version:''}));
+      const changes=list.version || pending.some(item=>item.id===list.id) ? tasks : [list,...tasks];
       if (!await store.change(changes)) return null;
-      update({focusId:task.id});return task;
+      update({focusId:tasks[0]?.id});return tasks;
     },
+    async newTask() { return (await store.newTasks())?.[0] || null; },
     base, staged, revision
   };return store;
 }

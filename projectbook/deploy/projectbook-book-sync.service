@@ -1,0 +1,9 @@
+[Unit]
+Description=Synchronize standalone ProjectBook with Git (fast-forward only)
+After=docker.service network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+TimeoutStartSec=600
+ExecStart=/usr/bin/docker run --rm --name projectbook-standalone-git-sync --memory=192m --memory-swap=192m --cpus=0.5 --pids-limit=64 --mount type=bind,src=/opt/projectbook/book,dst=/book --mount type=bind,src=/root/.ssh/id_rsa,dst=/run/git/id_ed25519,readonly --mount type=bind,src=/root/.ssh/known_hosts,dst=/run/git/known_hosts,readonly --entrypoint python projectbook-manager:git-sync-20261104 /app/git_worker.py sync

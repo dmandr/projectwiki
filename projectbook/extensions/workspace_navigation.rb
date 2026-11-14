@@ -1,4 +1,8 @@
 module ProjectBookWorkspaceNavigation
+  def projectbook_todo_page_version
+    @page ? @page.sha : ''
+  end
+
   def projectbook_todo_revision
     @historical && @page ? @page.version.id : ''
   end

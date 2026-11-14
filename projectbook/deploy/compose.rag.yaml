@@ -8,8 +8,10 @@ services:
     volumes: [rag-vectors:/qdrant/storage]
     networks: [book]
     mem_limit: ${PROJECTBOOK_QDRANT_MEMORY:-256m}
+    memswap_limit: ${PROJECTBOOK_QDRANT_MEMORY:-256m}
+    cgroup_parent: ${PROJECTBOOK_RAG_CGROUP_PARENT:-projectbookrag.slice}
     cpus: '${PROJECTBOOK_QDRANT_CPUS:-0.5}'
-    restart: unless-stopped
+    restart: 'no'
   rag:
     image: ${PROJECTBOOK_RAG_IMAGE:?Set a versioned RAG image}
     environment:
@@ -29,9 +31,11 @@ services:
       - rag-state:/state
     networks: [book]
     mem_limit: ${PROJECTBOOK_RAG_MEMORY:-896m}
+    memswap_limit: ${PROJECTBOOK_RAG_MEMORY:-896m}
+    cgroup_parent: ${PROJECTBOOK_RAG_CGROUP_PARENT:-projectbookrag.slice}
     cpus: '${PROJECTBOOK_RAG_CPUS:-1}'
     depends_on: [qdrant]
-    restart: unless-stopped
+    restart: 'no'
 volumes:
   rag-vectors:
   rag-models:

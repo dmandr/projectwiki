@@ -1,0 +1,9 @@
+[Unit]
+Description=Check standalone ProjectBook Git every minute
+[Timer]
+OnBootSec=30s
+OnUnitInactiveSec=60s
+AccuracySec=5s
+Unit=projectbook-book-sync.service
+[Install]
+WantedBy=timers.target

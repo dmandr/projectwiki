@@ -46,3 +46,19 @@ test('default list lookup ignores casing and editing preserves legacy fields',as
   const changed=store.pending().find(item=>item.id===task.id);
   assert.equal(changed.notes,'Keep');assert.equal(changed.due,'2026-12-01');
 });
+
+test('selection creates independent tasks in one staged batch',async()=>{
+  const {store,posts}=create();await store.load();
+  const tasks=await store.newTasks(['Купить масло','Check filter','Check filter']);
+  assert.deepEqual(tasks.map(t=>t.title),['Купить масло','Check filter','Check filter']);
+  assert.equal(new Set(tasks.map(t=>t.id)).size,3);
+  assert.equal(new Set(tasks.map(t=>t.list_id)).size,1);
+  store.setDocument(tasks.map(t=>todoLink(t,'Home.md')).join('\n'),'Home.md');
+  assert.equal(store.visiblePending().length,4);assert.equal(posts(),0);
+});
+test('invalid selected task is rejected before staging anything',async()=>{
+  const {store}=create();await store.load();
+  await assert.rejects(()=>store.newTasks(['a'.repeat(201)]),/200/);
+  await assert.rejects(()=>store.newTasks(Array(101).fill('Task')),/100/);
+  assert.equal(store.pending().length,0);
+});

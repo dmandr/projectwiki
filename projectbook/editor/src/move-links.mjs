@@ -1,3 +1,4 @@
+import {readTodo,labelText} from './inline-todo-format.mjs';
 import { fromMarkdown } from 'mdast-util-from-markdown';
 import { toMarkdown } from 'mdast-util-to-markdown';
 import {gfmFootnote} from 'micromark-extension-gfm-footnote';
@@ -52,7 +53,7 @@ export function rebaseMarkdown(source, from, to) {
   const edits = [];
   function rewrite(node) {
     let changed = false;
-    if (['link', 'image', 'definition'].includes(node.type)) {
+    if (['link', 'image', 'definition'].includes(node.type) && !(node.type==='link' && readTodo(labelText(node),node.url))) {
       const next = rebaseUrl(node.url, from, to);
       changed = next !== node.url; node.url = next;
     }

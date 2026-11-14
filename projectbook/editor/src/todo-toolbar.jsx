@@ -59,12 +59,12 @@ function TodoPicker({kind,store,onClose,onInsert}) {
   </dialog>,document.body);
 }
 
-export function TodoToolbar({store,onInsert,onError}) {
+export function TodoToolbar({store,onInsert,onNew,onError}) {
   const s=useTodos(store),mode=useCellValue(viewMode$),[picker,setPicker]=React.useState(null);
   const disabled=s.loading || s.busy || !s.editable || mode==='diff';
   const insert=(item,status)=>{try{onInsert(item,status);}catch(error){onError(error.message);}};
   return <><span className="pb-todo-editor-tools" role="group" aria-label="TODO tools">
-    <button type="button" title="New TODO" aria-label="New TODO" disabled={disabled} onMouseDown={event=>event.preventDefault()} onClick={async()=>{try{const item=await store.newTask();if(item)insert(item,'');}catch(error){onError(error.message);}}}><Icon kind="new"/></button>
+    <button type="button" title="New TODO" aria-label="New TODO" disabled={disabled} onMouseDown={event=>event.preventDefault()} onClick={async()=>{try{await onNew();}catch(error){onError(error.message);}}}><Icon kind="new"/></button>
     <button type="button" title="Insert existing TODO" aria-label="Insert existing TODO" disabled={disabled} onMouseDown={event=>event.preventDefault()} onClick={()=>setPicker('task')}><Icon kind="task"/></button>
     <button type="button" title="Insert TODO list" aria-label="Insert TODO list" disabled={disabled} onMouseDown={event=>event.preventDefault()} onClick={()=>setPicker('list')}><Icon kind="list"/></button>
   </span>{picker && <TodoPicker kind={picker} store={store} onClose={()=>setPicker(null)} onInsert={insert}/>}</>;

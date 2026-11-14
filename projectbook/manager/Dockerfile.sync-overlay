@@ -1,0 +1,3 @@
+FROM projectbook-manager:memory-guard-20261029-v2
+COPY *.py /app/
+COPY static/app.js /app/static/app.js

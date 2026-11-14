@@ -1,5 +1,11 @@
 # One origin for the Cloudflare hostname. /mcp uses the separate MCP listener.
 services:
+  manager:
+    environment:
+      RAG_CGROUP_PARENT: projectbookrag.slice
+      RAG_REQUIRE_CGROUP: 'true'
+    volumes:
+      - /sys/fs/cgroup:/host-cgroup:ro
   proxy:
     image: nginx:1.28-alpine
     restart: unless-stopped

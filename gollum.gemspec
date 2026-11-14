@@ -83,6 +83,8 @@ Gem::Specification.new do |s|
     lib/gollum/projectbook_raw_notes.rb
     lib/gollum/views/raw_notes.rb
     lib/gollum/templates/raw_notes.mustache
+    lib/gollum/projectbook_inline_todos.rb
+    lib/gollum/projectbook_inline_todo_migration.rb
     lib/gollum/projectbook_tasks.rb
     lib/gollum/projectbook_task_migration.rb
     lib/gollum/views/tasks.rb

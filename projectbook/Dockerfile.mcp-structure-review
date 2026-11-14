@@ -1,0 +1,9 @@
+FROM projectwiki:access-review
+USER root
+WORKDIR /opt/projectbook-source
+COPY . .
+RUN gem build gollum.gemspec \
+ && gem install --local --force --ignore-dependencies --no-document ./gollum-*.gem \
+ && rm ./gollum-*.gem
+USER www-data
+WORKDIR /wiki

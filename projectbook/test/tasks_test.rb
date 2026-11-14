@@ -23,7 +23,7 @@ class TasksTest < Minitest::Test
   def list;{'kind'=>'list','id'=>LIST,'title'=>'Весна','notes'=>'Annual preparation','expected_version'=>''};end
   def task;{'kind'=>'task','id'=>TASK,'title'=>'Проверить масло','notes'=>'Read the manual','list_id'=>LIST,'status'=>'open','due'=>'2027-04-01','expected_version'=>''};end
   def service;Gollum::ProjectbookKnowledge.new(wiki);end
-  def write(changes,dry_run:false);service.save_todos(changes:changes,dry_run:dry_run);end
+  def write(changes,dry_run:false);Gollum::ProjectbookTasks.save(wiki,changes,{message:'Legacy fixture'},dry_run:dry_run);end
   def current_task
     item=service.read_todo(id:TASK)
     item.transform_keys(&:to_s).merge('expected_version'=>item[:version])
@@ -43,23 +43,13 @@ class TasksTest < Minitest::Test
     write([current_task])
     assert_equal revision,head,'Unchanged metadata must not create a commit'
   end
-  def test_document_and_tasks_atomic_conflict_and_snapshot
+  def test_legacy_editor_write_is_rejected_without_changes
     before=head
-    source=wiki.page('Home.md')
-    input={'path'=>'Home.md','etag'=>source.sha,'content'=>"# Home\n\n[TODO: Oil](Tasks/#{TASK}.md)\n",'todos'=>[list,task]}
-    Gollum::ProjectbookSave.save(wiki,input,[],{message:'Document with TODO'})
-    created=head
-    assert_equal before,wiki.commit_for('main').parent.id
-    old=current_task
-    write([old.merge('status'=>'done')])
-    input.merge!('etag'=>wiki.page('Home.md').sha,'content'=>"# Home\n\nMust not save\n",'todos'=>[old.merge('title'=>'Stale edit')])
-    last=head
-    error=assert_raises(Gollum::ProjectbookCreation::Error){Gollum::ProjectbookSave.save(wiki,input,[],{message:'Stale'})}
-    assert_equal 412,error.status
-    assert_equal last,head
+    input={'path'=>'Home.md','etag'=>wiki.page('Home.md').sha,'content'=>'Must not save','todos'=>[list,task]}
+    error=assert_raises(Gollum::ProjectbookCreation::Error){Gollum::ProjectbookSave.save(wiki,input,[],{message:'Old editor'})}
+    assert_equal 409,error.status
+    assert_equal before,head
     refute_includes wiki.page('Home.md').text_data,'Must not save'
-    assert_equal 'open',Gollum::ProjectbookKnowledge.new(wiki,revision:created).read_todo(id:TASK)['status']
-    assert_equal 'done',service.read_todo(id:TASK)['status']
   end
   def test_invalid_metadata_duplicates_local_work_and_unknown_lists
     before=head
@@ -82,16 +72,13 @@ class TasksTest < Minitest::Test
     assert_equal LIST,service.read_todo(id:TASK)['list_id']
     assert_equal 'Autumn',service.list_todo_lists[:items][0]['title']
   end
-  def test_api_permissions_and_catalog
-    body=JSON.generate(changes:[list,task])
-    assert_equal 403,@client.post('/gollum/projectbook/tasks',input:body,'CONTENT_TYPE'=>'application/json').status
-    assert_equal 403,@client.post('/gollum/projectbook/tasks',input:body,'CONTENT_TYPE'=>'application/json','HTTP_X_PROJECTWIKI_REQUEST'=>'1','HTTP_ORIGIN'=>'https://foreign.test').status
+  def test_legacy_api_is_read_only
+    body=JSON.generate(changes:[list,task]);before=head
     reply=@client.post('/gollum/projectbook/tasks',input:body,'CONTENT_TYPE'=>'application/json','HTTP_X_PROJECTWIKI_REQUEST'=>'1')
-    assert_equal 200,reply.status,reply.body
+    assert_equal 409,reply.status
+    assert_equal before,head
+    write([list,task])
     assert_equal 1,JSON.parse(@client.get('/gollum/projectbook/tasks').body)['tasks'].size
-    Precious::App.set :wiki_options,{ref:'main',allow_editing:false}
-    assert_equal 403,@client.post('/gollum/projectbook/tasks',input:body,'CONTENT_TYPE'=>'application/json','HTTP_X_PROJECTWIKI_REQUEST'=>'1').status
-    assert_equal false,JSON.parse(@client.get('/gollum/projectbook/tasks').body)['editable']
   end
   def test_source_links_ignore_code_and_external_urls_and_use_current_snapshot
     write([list,task])
@@ -111,7 +98,8 @@ class TasksTest < Minitest::Test
 
   def test_editor_records_origin_and_reference_index_follows_moves
     input={'path'=>'Home.md','etag'=>wiki.page('Home.md').sha,'content'=>"# Home\n\n[TODO: Oil](Tasks/#{TASK}.md)\n",'todos'=>[list,task]}
-    Gollum::ProjectbookSave.save(wiki,input,[],{message:'Create source'})
+    write([list,task.merge('source_path'=>'Home.md')])
+    wiki.update_page(wiki.page('Home.md'),'Home',:markdown,input['content'],message:'Legacy source')
     assert_equal 'Home.md',service.read_todo(id:TASK)['source_path']
     input={'source_path'=>'Home.md','path'=>'Moved.md','etag'=>wiki.page('Home.md').sha,'content'=>wiki.page('Home.md').text_data,'move_revision'=>head}
     Gollum::ProjectbookSave.save(wiki,input,[],{message:'Move source'})

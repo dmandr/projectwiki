@@ -1,3 +1,4 @@
+import {readTodo,labelText} from './inline-todo-format.mjs';
 import {fromMarkdown} from 'mdast-util-from-markdown';
 import {toMarkdown} from 'mdast-util-to-markdown';
 import {gfmFootnote} from 'micromark-extension-gfm-footnote';
@@ -63,7 +64,7 @@ export function rewriteBookLinks(text, from, to, source, target, paths, mapping 
   }
   function rewrite(node){
     let changed=false;
-    if(['link','image','definition'].includes(node.type)){const next=url(node.url);changed=next!==node.url;node.url=next;}
+    if(['link','image','definition'].includes(node.type) && !(node.type==='link' && readTodo(labelText(node),node.url))){const next=url(node.url);changed=next!==node.url;node.url=next;}
     for(const child of node.children||[]) changed=rewrite(child)||changed;
     return changed;
   }
@@ -71,7 +72,7 @@ export function rewriteBookLinks(text, from, to, source, target, paths, mapping 
     const [a,b]=range(node);
     if(['code','inlineCode','yaml','toml'].includes(node.type)){protectedRanges.push([a,b]);return;}
     if(protectedRanges.some(([x,y])=>a>=x && b<=y) && node.type!=='root') return;
-    if(['link','image','definition'].includes(node.type)){
+    if(['link','image','definition'].includes(node.type) && !(node.type==='link' && readTodo(labelText(node),node.url))){
       protectedRanges.push([a,b]);
       if(rewrite(node))edits.push({a,b,text:toMarkdown(node,{extensions:[gfmFootnoteToMarkdown()]}).trimEnd()});
     } else if(node.type==='html'){

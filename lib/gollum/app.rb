@@ -20,6 +20,7 @@ require 'gollum/projectbook_folders'
 require 'gollum/projectbook_local_assets'
 require 'gollum/projectbook_save'
 require 'gollum/projectbook_tasks'
+require 'gollum/projectbook_inline_todos'
 require 'gollum/projectbook_raw_notes'
 require 'gollum/projectbook_mcp'
 require 'gollum/projectbook_settings'
@@ -253,6 +254,31 @@ module Precious
         mustache :tasks
       end
 
+      get '/projectbook/inline-todos' do
+        content_type :json
+        cache_control :no_store
+        begin
+          snapshot=Gollum::ProjectbookKnowledge.new(wiki_new,revision:params['revision'])
+          Gollum::ProjectbookInlineTodos.catalog(snapshot).merge(editable:@allow_editing && !params['revision']).to_json
+        rescue Gollum::ProjectbookCreation::Error => e
+          halt e.status,{error:e.message}.to_json
+        end
+      end
+      post '/projectbook/inline-todos' do
+        content_type :json
+        halt 403,{error:'Use the TODO interface.'}.to_json unless request.env['HTTP_X_PROJECTWIKI_REQUEST']=='1'
+        halt 403,{error:'Cross-origin request rejected.'}.to_json if request.env['HTTP_ORIGIN'] && request.env['HTTP_ORIGIN']!="#{request.scheme}://#{request.host_with_port}"
+        halt 415,{error:'Expected JSON.'}.to_json unless request.media_type=='application/json'
+        begin
+          input=JSON.parse(request.body.read(2*1024*1024+1))
+          Gollum::ProjectbookInlineTodos.save(wiki_new,input.fetch('changes'),commit_options.merge(message:'Update inline TODOs')).to_json
+        rescue JSON::ParserError,KeyError,TypeError
+          halt 422,{error:'Invalid TODO request.'}.to_json
+        rescue Gollum::ProjectbookCreation::Error => e
+          halt e.status,{error:e.message}.to_json
+        end
+      end
+
       get '/projectbook/tasks' do
         content_type :json
         cache_control :no_store
@@ -265,19 +291,7 @@ module Precious
       end
 
       post '/projectbook/tasks' do
-        content_type :json
-        halt 403, {error: 'Use the TODO interface.'}.to_json unless request.env['HTTP_X_PROJECTWIKI_REQUEST'] == '1'
-        halt 403, {error: 'Cross-origin request rejected.'}.to_json if request.env['HTTP_ORIGIN'] && request.env['HTTP_ORIGIN'] != "#{request.scheme}://#{request.host_with_port}"
-        halt 415, {error: 'Expected JSON.'}.to_json unless request.media_type == 'application/json'
-        begin
-          input = JSON.parse(request.body.read(2 * 1024 * 1024 + 1))
-          raise Gollum::ProjectbookCreation::Error, 'Invalid TODO request.' unless input.is_a?(Hash)
-          Gollum::ProjectbookTasks.save(wiki_new, input['changes'], commit_options.merge(message: 'Update TODOs')).to_json
-        rescue JSON::ParserError
-          halt 422, {error: 'Invalid TODO JSON.'}.to_json
-        rescue Gollum::ProjectbookCreation::Error => e
-          halt e.status, {error: e.message}.to_json
-        end
+        halt 409, {'Content-Type'=>'application/json'}, {error:'Legacy TODO writes are disabled. Reload the editor and use inline TODO definitions.'}.to_json
       end
 
       post '/projectbook/folder-page' do

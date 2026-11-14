@@ -3,6 +3,7 @@
   <p class="pb-settings-muted">Search and navigation settings belong to this deployment. Raw Notes synchronization is controlled by a .gitignore rule in the book.</p>
   <nav class="pb-settings-tabs" role="tablist" aria-label="Settings sections">
     <a id="pb-semantic-tab" href="#semantic-search" role="tab" aria-selected="true" aria-controls="semantic-search">Semantic Search</a>
+    <a id="pb-editor-tab" href="#editor" role="tab" aria-selected="false" aria-controls="editor">Editor</a>
     <a id="pb-navigation-tab" href="#navigation" role="tab" aria-selected="false" aria-controls="navigation">Navigation</a>
     <a href="#raw-notes-settings" role="tab" aria-selected="false" aria-controls="raw-notes-settings">Raw Notes</a>
   </nav>
@@ -34,6 +35,16 @@
     <p>No changes to the saved revision or indexing configuration means no rebuild. On a change, unchanged files reuse cached text and embeddings; a new complete search index is published when ready. Removed files disappear from the new index.</p>
     <p>The first run, enabling PDF text, or a manual update may also require indexing. Opening documents and searching do not trigger a rebuild. Git synchronization and direct save/pull event triggers are planned separately.</p>
   </details>
+  </section>
+  <section id="editor" role="tabpanel" aria-labelledby="pb-editor-tab" hidden>
+    <h2>Visual editor</h2>
+    <label for="pb-enter-mode">Enter key behavior</label>
+    <select id="pb-enter-mode">
+      <option value="paragraph">Enter: new paragraph · Cmd/Ctrl+Enter: line break</option>
+      <option value="line-break">Enter: line break · Cmd/Ctrl+Enter: new paragraph</option>
+    </select>
+    <p class="pb-settings-muted">Saved automatically for this browser. A line break is stored as a backslash followed by a newline in Markdown. A paragraph is separated by a blank line. Shift+Enter always inserts a line break. Code blocks and Markdown source mode keep their normal behavior.</p>
+    <p id="pb-enter-message" role="status"></p>
   </section>
   <section id="navigation" role="tabpanel" aria-labelledby="pb-navigation-tab" hidden>
     <h2>Tree editing</h2>
@@ -162,7 +173,7 @@
 (() => {
   const tabs = [...document.querySelectorAll('.pb-settings-tabs [role="tab"]')];
   function select() {
-    const active = ['navigation','raw-notes-settings'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'semantic-search';
+    const active = ['navigation','raw-notes-settings','editor'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'semantic-search';
     tabs.forEach(tab => { const yes = tab.getAttribute('aria-controls') === active; tab.setAttribute('aria-selected', String(yes)); document.getElementById(tab.getAttribute('aria-controls')).hidden = !yes; });
   }
   window.addEventListener('hashchange', select); select();
@@ -197,4 +208,17 @@
 (()=>{let current;const box=document.getElementById('raw-sync-git'),save=document.getElementById('raw-sync-save'),status=document.getElementById('raw-sync-status');
 async function load(){try{const response=await fetch(baseUrl+'/gollum/projectbook/raw-notes-settings',{cache:'no-store'});current=await response.json();if(!response.ok)throw Error(current.error||'Could not load settings');box.checked=current.sync_git;box.disabled=!current.editable;save.disabled=!current.editable;}catch(e){status.textContent=e.message;}}
 save.onclick=async()=>{if(!box.checked&&current.tracked_files&&!confirm('Remove existing notes from Git tracking? Files stay on this server, but the removal will be sent to GitHub and other deployments. Git history remains.'))return;save.disabled=true;try{const response=await fetch(baseUrl+'/gollum/projectbook/raw-notes/settings',{method:'POST',headers:{'Content-Type':'application/json','X-ProjectWiki-Request':'1'},body:JSON.stringify({sync_git:box.checked,version:current.version,confirm_untrack:true})});const result=await response.json();if(!response.ok)throw Error(result.error||'Could not save settings');status.textContent='Saved';await load();}catch(e){status.textContent=e.message;save.disabled=false;}};load();})();
+</script>
+
+<script>
+(() => {
+  const control=document.getElementById('pb-enter-mode'),message=document.getElementById('pb-enter-message');
+  const key='projectbook:editor:enter-mode';
+  try { control.value=localStorage.getItem(key)==='line-break'?'line-break':'paragraph'; }
+  catch { message.textContent='Browser storage is unavailable.'; }
+  control.addEventListener('change',()=>{
+    try { localStorage.setItem(key,control.value);message.textContent='Saved for this browser.'; }
+    catch { message.textContent='Could not save this preference. Check browser storage settings.'; }
+  });
+})();
 </script>

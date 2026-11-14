@@ -113,6 +113,9 @@ def handler(manager, gateway, auth, kind):
                     self.send(200, {'books': [manager.public(b) for b in books], 'auth_mode': auth.mode,
                                     'mcp_url': os.environ.get('MCP_PUBLIC_URL', 'http://127.0.0.1:8071/mcp'),
                                     'cloudflare': manager.cloudflare.status()})
+                elif self.path == '/api/resources':
+                    from resources import snapshot
+                    self.send(200, snapshot(manager))
                 elif self.path == '/api/people':
                     self.send(200, {'people': manager.people(), 'limit': 50})
                 elif re.fullmatch(r'/api/books/[a-f0-9]{12}/index', self.path):
@@ -200,6 +203,7 @@ def handler(manager, gateway, auth, kind):
 if __name__ == '__main__':
     auth = Auth()
     manager = Manager(os.environ.get('MANAGER_DATA', '/data'))
+    threading.Thread(target=manager.sync_loop, daemon=True).start()
     gateway = Gateway(manager)
     admin = ThreadingHTTPServer(('0.0.0.0', 8070), handler(manager, gateway, auth, 'admin'))
     mcp = ThreadingHTTPServer(('0.0.0.0', 8071), handler(manager, gateway, auth, 'mcp'))

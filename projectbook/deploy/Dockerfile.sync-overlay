@@ -1,0 +1,6 @@
+ARG BASE_IMAGE=projectwiki:todo-selection-20261104-amd64
+FROM ${BASE_IMAGE}
+USER root
+COPY projectbook_creation.rb /tmp/projectbook_creation.rb
+RUN ruby -e 'require "gollum/app"; path=$LOADED_FEATURES.find { |p| p.end_with?("/gollum/projectbook_creation.rb") }; abort "Missing middleware" unless path; File.write(path,File.read("/tmp/projectbook_creation.rb"))' && cp /tmp/projectbook_creation.rb /opt/projectbook-source/lib/gollum/projectbook_creation.rb && rm /tmp/projectbook_creation.rb
+USER www-data

@@ -108,6 +108,7 @@ class Manager:
         self.docker = docker or Docker()
         self.active = set()
         self.guard = threading.RLock()
+        self.index_guard = threading.Lock()
         self.book_locks = {}
         self.network = os.environ.get('BOOK_NETWORK', 'projectbook-manager-books')
         from cloudflare import Cloudflare
@@ -119,6 +120,24 @@ class Manager:
             if b['state'] not in ('ready', 'removed', 'error'):
                 self.registry.update(b['id'], state='error', error='Manager restarted during operation. Retry to continue.',
                                      failed_action=b.get('action', 'install'))
+
+    def sync_loop(self):
+        interval = max(30, int(os.environ.get('BOOK_SYNC_INTERVAL', '60')))
+        while True:
+            for book in self.registry.books():
+                if book.get('state') != 'ready':
+                    continue
+                with self.lock(book['id']):
+                    current = self.registry.get(book['id'])
+                    if current.get('state') != 'ready':
+                        continue
+                    try:
+                        result = self.git(current, 'sync')
+                        self.registry.update(book['id'], sync=result)
+                    except Exception as error:
+                        message = str(error) if isinstance(error, Problem) else 'Synchronization failed; retry scheduled.'
+                        self.registry.update(book['id'], sync={'ok': False, 'checked_at': time.time(), 'error': message})
+            time.sleep(interval)
 
     def lock(self, book_id):
         with self.guard:
@@ -282,7 +301,7 @@ class Manager:
         created = obj is None
         if not obj:
             args = ['create', '--name', name, *self.labels(b['id']), '--network', self.network,
-                    '--restart', 'unless-stopped', '--init', '--log-opt', 'max-size=10m', '--log-opt', 'max-file=2']
+                    '--restart', ('unless-stopped' if os.environ.get('RAG_PERSISTENT', 'false') == 'true' else 'no') if role in ('rag', 'qdrant') else 'unless-stopped', '--init', '--log-opt', 'max-size=10m', '--log-opt', 'max-file=2']
             if port is not None:
                 # Explicit port is persisted in Docker HostConfig and survives restarts.
                 chosen_port = port or (18000 + secrets.randbelow(20000))
@@ -322,12 +341,17 @@ class Manager:
                'PROJECTBOOK_MCP_TOKEN': b['token'], 'PROJECTBOOK_SETTINGS_ADMIN': 'true',
                'PROJECTBOOK_RAW_UPLOADS': '/var/lib/projectbook/raw-uploads'}
         if b['indexing']:
-            self.start_index(b, result['branch'])
             env['PROJECTBOOK_RAG_URL'] = 'http://' + self.name(b, 'rag') + ':8090'
+            try:
+                self.start_index(b, result['branch'])
+                self.registry.update(b['id'], indexing_error='')
+            except Problem as error:
+                # Optional search must never prevent the book itself from starting.
+                self.registry.update(b['id'], indexing_error=str(error))
         obj = self.ensure_container(b, 'wiki', os.environ.get('BOOK_IMAGE', 'projectwiki:local'),
                                    [(self.name(b, 'book'), '/wiki', False), (self.name(b, 'settings'), '/var/lib/projectbook', False)],
                                    env, port=b.get('port') or 0,
-                                   extra=['--memory', os.environ.get('BOOK_MEMORY', '768m')])
+                                   extra=['--memory', os.environ.get('BOOK_MEMORY', '768m') if os.environ.get('RESOURCE_LIMITS_ENABLED', 'true') == 'true' else '0'])
         port = int(obj['NetworkSettings']['Ports']['4567/tcp'][0]['HostPort'])
         self.registry.update(b['id'], port=port)
         deadline = time.monotonic() + 120
@@ -347,17 +371,67 @@ class Manager:
         raise Problem('Book started but MCP readiness timed out. Retry after checking the container.', 503)
 
     def start_index(self, b, branch):
+        with self.index_guard:
+            self._start_index(b, branch)
+
+    def _start_index(self, b, branch):
+        unlimited = os.environ.get('RESOURCE_LIMITS_ENABLED', 'true') != 'true'
+        parent = '' if unlimited else os.environ.get('RAG_CGROUP_PARENT', '')
+        if not unlimited and os.environ.get('RAG_REQUIRE_CGROUP', 'false') == 'true' and not parent:
+            raise Problem('RAG disabled: configure the shared memory cgroup first.', 503)
+        # Count running/restarting workers across all managers, not just this owner.
+        running = self.docker.run('ps', '--format', '{{.Names}}').splitlines()
+        workers = [n for n in running if n.startswith('pb-') and n.endswith('-rag') and n != self.name(b, 'rag')]
+        max_active = int(os.environ.get('RAG_MAX_ACTIVE', '1')) if os.environ.get('RESOURCE_LIMITS_ENABLED', 'true') == 'true' else 0
+        if max_active > 0 and len(workers) >= max_active:
+            raise Problem('RAG capacity reached; book remains available without semantic search.', 503)
+        if parent:
+            if not re.fullmatch(r'[A-Za-z0-9_-]+\.slice', parent):
+                raise Problem('Invalid RAG cgroup slice.', 503)
+            info = json.loads(self.docker.run('info', '--format', '{{json .}}'))
+            reserve = int(os.environ.get('RAG_HOST_RESERVE_MB', '2048'))
+            pool = int(os.environ.get('RAG_POOL_MEMORY_MB', '1280'))
+            if info.get('CgroupDriver') != 'systemd' or info.get('MemTotal', 0) < (reserve + pool) * 1024**2:
+                raise Problem('RAG disabled: insufficient host memory or unsupported cgroup driver.', 503)
+            try:
+                group = Path(os.environ.get('RAG_CGROUP_ROOT', '/host-cgroup')) / parent
+                cap = int((group / 'memory.max').read_text().strip())
+                if not 0 < cap <= pool * 1024**2:
+                    raise ValueError('unbounded pool')
+                if (group / 'memory.swap.max').read_text().strip() != '0':
+                    raise ValueError('swap not bounded')
+                used = int((group / 'memory.current').read_text().strip())
+            except (OSError, ValueError):
+                raise Problem('RAG disabled: shared cgroup memory limit is missing or too high.', 503)
+            available = next((int(line.split()[1]) * 1024 for line in Path('/proc/meminfo').read_text().splitlines()
+                              if line.startswith('MemAvailable:')), 0)
+            if available < max(0, cap - used) + 256 * 1024**2:
+                raise Problem('RAG deferred: not enough free host memory; book remains available.', 503)
+        limits = {'rag': os.environ.get('RAG_MEMORY', '896m'), 'qdrant': os.environ.get('QDRANT_MEMORY', '256m')}
+        if unlimited:
+            limits = dict.fromkeys(limits, '0')
+        for role in limits:
+            old = self.owned(b, self.name(b, role))
+            if old:
+                if old.get('State', {}).get('OOMKilled'):
+                    raise Problem('RAG previously exceeded its memory limit; inspect before recreating the worker.', 503)
+                if parent and old.get('HostConfig', {}).get('CgroupParent') != parent:
+                    raise Problem('RAG needs recreation in the shared memory cgroup; data volumes retained.', 503)
+                self.docker.run('update', '--restart=' + ('unless-stopped' if os.environ.get('RAG_PERSISTENT', 'false') == 'true' else 'no'), '--memory', limits[role], '--memory-swap', limits[role], self.name(b, role))
         for role in ('vectors', 'models', 'rag-state'):
             self.volume(b, role)
+        common = ['--cgroup-parent', parent] if parent else []
         self.ensure_container(b, 'qdrant', os.environ.get('QDRANT_IMAGE', 'qdrant/qdrant:v1.20.0'),
-                              [(self.name(b, 'vectors'), '/qdrant/storage', False)], {}, extra=['--memory', '512m'])
+                              [(self.name(b, 'vectors'), '/qdrant/storage', False)], {},
+                              extra=common + ['--memory', limits['qdrant'], '--memory-swap', limits['qdrant'], '--cpus', ('0' if unlimited else os.environ.get('QDRANT_CPUS', '0.5'))])
         self.ensure_container(b, 'rag', os.environ.get('RAG_IMAGE', 'projectbook-rag:local'),
                               [(self.name(b, 'book'), '/book', True), (self.name(b, 'models'), '/models', False),
                                (self.name(b, 'rag-state'), '/state', False)],
                               {'BOOK_DIR': '/book', 'BOOK_REF': branch, 'QDRANT_URL': 'http://' + self.name(b, 'qdrant') + ':6333',
-                               'RAG_ENABLED': 'true', 'RAG_LOW_MEMORY': 'true', 'BATCH_SIZE': '1',
-                               'MODEL_THREADS': '1', 'POLL_SECONDS': '60'},
-                              extra=['--memory', os.environ.get('RAG_MEMORY', '1536m'), '--cpus', '1'])
+                               'RAG_ENABLED': 'true', 'RAG_LOW_MEMORY': os.environ.get('RAG_LOW_MEMORY', 'true'), 'BATCH_SIZE': os.environ.get('RAG_BATCH_SIZE', '1'),
+                               'PDF_MEMORY_MB': os.environ.get('RAG_PDF_MEMORY_MB', '128'),
+                               'MODEL_THREADS': os.environ.get('RAG_MODEL_THREADS', '1'), 'POLL_SECONDS': '60'},
+                              extra=common + ['--memory', limits['rag'], '--memory-swap', limits['rag'], '--cpus', ('0' if unlimited else os.environ.get('RAG_CPUS', '1'))])
 
     def remove(self, b):
         self.registry.update(b['id'], state='saving')
@@ -419,6 +493,11 @@ class Manager:
     def index_status(self, b):
         if not b['indexing']:
             return {'state': 'disabled'}
+        worker = self.owned(b, self.name(b, 'rag'))
+        if worker and worker.get('State', {}).get('OOMKilled'):
+            return {'state': 'stopped: memory limit exceeded; manual inspection required'}
+        if b.get('indexing_error'):
+            return {'state': b['indexing_error']}
         try:
             r = requests.get('http://' + self.name(b, 'rag') + ':8090/status', timeout=2)
             data = r.json()

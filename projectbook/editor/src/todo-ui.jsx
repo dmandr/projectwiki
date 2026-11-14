@@ -1,5 +1,6 @@
 import React from 'react';
-import {createEditor,$getRoot,$createParagraphNode,$createTextNode,KEY_ENTER_COMMAND,KEY_ESCAPE_COMMAND,COMMAND_PRIORITY_HIGH} from 'lexical';
+import {createEditor,$getRoot,$createParagraphNode,$createTextNode,KEY_ENTER_COMMAND,KEY_ESCAPE_COMMAND,KEY_ARROW_LEFT_COMMAND,KEY_ARROW_RIGHT_COMMAND,KEY_BACKSPACE_COMMAND,KEY_DELETE_COMMAND,$getSelection,$isRangeSelection,COMMAND_PRIORITY_HIGH} from 'lexical';
+import {enterModeKey,enterAction} from './enter-mode.mjs';
 import {registerPlainText} from '@lexical/plain-text';
 import {registerHistory,createEmptyHistoryState} from '@lexical/history';
 import './todo.css';
@@ -66,9 +67,10 @@ export function TaskSource({store,task}) {
   </span>;
 }
 
-function TaskText({store,task,direct}) {
+function TaskText({store,task,direct,onBoundary}) {
   const s=useTodos(store),input=React.useRef(null),editorRef=React.useRef(null),original=React.useRef(task),latest=React.useRef(task);
   latest.current=task;
+  const boundary=React.useRef(onBoundary);boundary.current=onBoundary;
   React.useLayoutEffect(()=>{
     // Give each task an independent editor root. The document editor must not
     // handle Select All, typing or undo intended for this nested text field.
@@ -85,11 +87,28 @@ function TaskText({store,task,direct}) {
       if(text!==title)replace(title);
       if(store.staged && title!==latest.current.title)store.change([{...latest.current,title}]);
     });
-    const unregisterEnter=editor.registerCommand(KEY_ENTER_COMMAND,event=>{event?.preventDefault();input.current.blur();return true;},COMMAND_PRIORITY_HIGH);
+    const exit=(before,action)=>{input.current.blur();queueMicrotask(()=>boundary.current?.(before,action));};
+    const unregisterEdges=[[KEY_ARROW_LEFT_COMMAND,true],[KEY_ARROW_RIGHT_COMMAND,false],[KEY_BACKSPACE_COMMAND,true],[KEY_DELETE_COMMAND,false]].map(([command,before])=>editor.registerCommand(command,event=>{
+      if(!boundary.current || event?.shiftKey || editor.isComposing())return false;
+      const selection=$getSelection();if(!$isRangeSelection(selection)||!selection.isCollapsed())return false;
+      const point=selection.anchor,node=point.getNode();
+      const offset=point.offset;
+      const atEdge=before ? offset===0 && !node.getPreviousSibling() : offset===node.getTextContentSize() && !node.getNextSibling();
+      if(!atEdge)return false;
+      event?.preventDefault();exit(before);return true;
+    },COMMAND_PRIORITY_HIGH));
+    const unregisterEnter=editor.registerCommand(KEY_ENTER_COMMAND,event=>{
+      if(editor.isComposing())return false;
+      event?.preventDefault();
+      if(boundary.current){let mode='paragraph';try{mode=localStorage.getItem(enterModeKey)||mode;}catch{}
+        exit(false,enterAction(mode,event||{}));
+      }else input.current.blur();
+      return true;
+    },COMMAND_PRIORITY_HIGH);
     const unregisterEscape=editor.registerCommand(KEY_ESCAPE_COMMAND,event=>{
       event?.preventDefault();replace(original.current.title);if(store.staged)store.change([original.current]);return true;
     },COMMAND_PRIORITY_HIGH);
-    return ()=>{unregisterEscape();unregisterEnter();unregisterUpdate();unregisterHistory();unregisterPlain();editor.setRootElement(null);editorRef.current=null;};
+    return ()=>{unregisterEdges.forEach(fn=>fn());unregisterEscape();unregisterEnter();unregisterUpdate();unregisterHistory();unregisterPlain();editor.setRootElement(null);editorRef.current=null;};
   },[store]);
   React.useLayoutEffect(()=>{
     const editor=editorRef.current;if(!editor)return;
@@ -117,7 +136,7 @@ function TaskText({store,task,direct}) {
     onFocus={()=>{original.current=latest.current;}} onBlur={commit}/><span className="pb-task-print-title">{task.title}</span></>;
 }
 
-export function TaskRow({store,id,direct=false,wrapped=false,navigate=false,showList=true,editDetails=false}) {
+export function TaskRow({store,id,direct=false,wrapped=false,navigate=false,showList=true,editDetails=false,onBoundary}) {
   const s=useTodos(store),task=s.tasks.find(t=>t.id===id);
   React.useEffect(()=>{
     if(!direct || !task)return;
@@ -130,7 +149,7 @@ export function TaskRow({store,id,direct=false,wrapped=false,navigate=false,show
     {!wrapped && <input type="checkbox" aria-label={'Complete '+task.title} checked={task.status==='done'} disabled={!s.editable || s.busy}
       onChange={()=>store.change([{...task,status:task.status==='done'?'open':'done'}])}/>}
     <span className="pb-task-body">
-      {navigate ? <TaskSource store={store} task={task}/> : canEdit ? <TaskText store={store} task={task} direct={direct}/> : <span className={'pb-task-text '+(task.status==='done'?'pb-task-done':'')}>{task.title}</span>}
+      {navigate ? <TaskSource store={store} task={task}/> : canEdit ? <TaskText store={store} task={task} direct={direct} onBoundary={onBoundary}/> : <span className={'pb-task-text '+(task.status==='done'?'pb-task-done':'')}>{task.title}</span>}
       {showList && <>{' '}{canEdit ? <ListPicker store={store} value={task.list_id} label={'List for '+task.title} onChoose={(next,isNew)=>store.change([...(isNew?[next]:[]),{...task,list_id:next.id}])}/> : <span className="pb-task-tag">{list?.title || 'Missing list'}</span>}</>}
     </span>
   </span>;

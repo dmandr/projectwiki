@@ -19,6 +19,7 @@ function render() {
     if(['ready','error'].includes(b.state)){const remove=el('button','quiet','Remove');remove.onclick=()=>{removing=b;$('#remove-title').textContent='Remove '+b.name+'?';$('#remove-confirm').value='';$('#remove-error').textContent='';$('#remove-dialog').showModal();};actions.append(remove);}
     main.append(info,actions);card.append(main);
     if(b.error)card.append(el('p','error',b.error));
+    if(b.sync)card.append(el('p',b.sync.ok?'hint':'error',b.sync.ok?'Git synchronized · '+b.sync.revision.slice(0,12)+' · '+new Date(b.sync.checked_at*1000).toLocaleString():'Git sync: '+b.sync.error));
     if(b.state==='removed')card.append(el('p','hint','Saved to Git · '+(b.saved_revision||'').slice(0,12)+' · Storage retained for recovery'));
     if(b.state==='ready') {const status=el('p','hint',b.indexing?'Search: checking index…':'Semantic search disabled');status.dataset.index=b.id;card.append(status);}
     if(b.cloudflare){card.append(el('p','hint','Cloudflare: '+(b.cloudflare.state||'pending')+' · '+(b.users||[]).length+' people with access'));}
@@ -69,3 +70,27 @@ $('#create-form').elements.repo.oninput=()=>{$('#repository-result').textContent
 const githubResult=new URLSearchParams(location.search).get('github');
 if(githubResult){notice(githubResult==='connected'?'GitHub connected. You can now create a book.':'GitHub connection failed or was cancelled. Check the account and App settings, then try Connect GitHub again.');history.replaceState(null,'','/');}
 refresh();setInterval(refresh,4000);
+
+const resourcesPanel=el('dialog','resources-dialog');
+const resourcesLink=el('button','quiet resource-link','Resource Usage');
+resourcesLink.type='button';$('footer').append(resourcesLink);
+const resourcesClose=el('button','quiet','Close');resourcesClose.type='button';resourcesClose.onclick=()=>resourcesPanel.close();
+resourcesPanel.append(resourcesClose);document.body.append(resourcesPanel);
+resourcesLink.onclick=()=>{resourcesPanel.showModal();refreshResources(true);};
+resourcesPanel.append(el('h2','','Server resources'));
+const resourcesSummary=el('p','hint','Loading…'),resourcesRows=el('div','resource-table');
+resourcesPanel.append(resourcesSummary,resourcesRows);
+const gib=value=>(value/1073741824).toFixed(1)+' GiB';
+let resourcesBusy=false;
+async function refreshResources(force=false){
+  if(resourcesBusy||(!force&&document.hidden)||!resourcesPanel.open)return;resourcesBusy=true;
+  try{
+    const data=await api('/api/resources'),m=data.memory;
+    resourcesSummary.textContent=`Memory: ${gib(m.MemTotal-m.MemAvailable)} used / ${gib(m.MemTotal)} total · ${gib(m.MemAvailable)} available · Swap: ${gib(m.SwapTotal-m.SwapFree)} · ${data.cpus} CPUs · Resource limits ${data.limits_enabled?'enabled':'disabled'} · Updated ${new Date(data.updated_at*1000).toLocaleTimeString()}`;
+    const table=el('table'),head=el('tr');for(const label of ['Book / service','Container','CPU','Memory used / available limit','Processes'])head.append(el('th','',label));table.append(head);
+    for(const r of data.containers){const row=el('tr');for(const value of [r.group,r.name,r.cpu,r.memory,r.pids])row.append(el('td','',value));table.append(row);}
+    resourcesRows.replaceChildren(table);
+  }catch(e){resourcesSummary.textContent='Resource monitoring unavailable: '+e.message;}
+  finally{resourcesBusy=false;}
+}
+setInterval(refreshResources,15000);

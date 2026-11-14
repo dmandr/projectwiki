@@ -10,14 +10,24 @@ module Gollum
       end
     end
 
-    # One writer at a time for this app process, including stock Gollum saves/uploads.
-    # External Git clients and other instances still require future synchronization.
+    # Coordinate HTTP/MCP reads and writes with the external Git sync helper.
     class WriteLock
       LOCK = Mutex.new
       def initialize(app); @app = app; end
       def call(env)
-        return @app.call(env) if %w[GET HEAD OPTIONS].include?(env['REQUEST_METHOD']) && !env['PATH_INFO'].to_s.start_with?('/gollum/projectbook/raw-notes')
-        LOCK.synchronize { @app.call(env) }
+        read = %w[GET HEAD OPTIONS].include?(env['REQUEST_METHOD']) && !env['PATH_INFO'].to_s.start_with?('/gollum/projectbook/raw-notes')
+        path = ::File.join(Precious::App.gollum_path, '.git', 'projectbook-sync.lock')
+        operation = proc do
+          ::File.open(path, ::File::RDWR | ::File::CREAT, 0666) do |file|
+            file.flock(read ? ::File::LOCK_SH : ::File::LOCK_EX)
+            begin
+              @app.call(env)
+            ensure
+              file.flock(::File::LOCK_UN)
+            end
+          end
+        end
+        read ? operation.call : LOCK.synchronize(&operation)
       end
     end
 

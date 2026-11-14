@@ -6,7 +6,8 @@ import { MDXEditor, realmPlugin, addExportVisitor$, rootEditor$, viewMode$,
   imagePlugin, tablePlugin, codeBlockPlugin, codeMirrorPlugin, frontmatterPlugin, markdownShortcutPlugin,
   diffSourcePlugin, toolbarPlugin, UndoRedo, BoldItalicUnderlineToggles,
   ListsToggle, CreateLink, InsertImage, InsertTable, InsertCodeBlock, Separator } from '@mdxeditor/editor';
-import { $createRangeSelection, $setSelection, $getSelection, $isRangeSelection } from 'lexical';
+import { $createRangeSelection, $setSelection, $getSelection, $isRangeSelection, $createParagraphNode } from 'lexical';
+import {$getNodeByKey} from 'lexical';
 import { EditorView } from '@codemirror/view';
 import { draftStore } from './drafts';
 import { rebaseMarkdown } from './move-links.mjs';
@@ -14,13 +15,16 @@ import {confirmMove} from './move-preview.mjs';
 import { documentTitle, withDocumentTitle } from './document-title.mjs';
 import { titleFromPath } from './names.mjs';
 import { imageDimensionsPlugin, ImageToolbar } from './image-dimensions';
-import { todoStore, TodoMessages, useTodos } from './todo-ui';
-import { todoPlugin } from './todo-editor';
-import { TodoToolbar } from './todo-toolbar';
+import { inlineStore, TagsDialog } from './inline-todo-ui';
+import {scanInlineTodos,editTodoTags,cleanTags,todoMarkdown,todoListMarkdown} from './inline-todo-format.mjs';
+import { inlineTodoPlugin, $createInlineTodo, selectedTodoNodes } from './inline-todo-editor';
+import { InlineTodoToolbar } from './inline-todo-toolbar';
+import { enterModePlugin } from './enter-mode-plugin';
 import { EditorToolbar } from './editor-toolbar';
 import {calloutsPlugin,CalloutBlockType} from './callouts';
 import {footnotesPlugin,InsertFootnote} from './footnotes';
-import { todoLink, pendingTodos } from './todo-format.mjs';
+import { todoTitles, sourceTodoSelection } from './todo-selection.mjs';
+
 import '@mdxeditor/editor/style.css';
 import './style.css';
 
@@ -50,14 +54,13 @@ if (document.getElementById('projectbook-editor-app')) {
   } });
 
   function Editor() {
-    const todos = React.useMemo(() => todoStore({base, staged:true, onChange:()=>stashSoon()}), []);
-    useTodos(todos);
-    React.useEffect(()=>{todos.setDocument(initial,path);todos.load();},[]);
+    const todoCatalog=React.useMemo(()=>inlineStore({base}),[]);
+    React.useEffect(()=>{todoCatalog.load();},[]);
+    const [tagSelection,setTagSelection]=useState(null);
     const ref = useRef(null), current = useRef(initial), normalized = useRef(null);
     const pending = useRef([]), working = useRef(false), allowLeave = useRef(false);
     const queue = useRef(Promise.resolve()), draftTimer = useRef(null);
     const [status, setStatus] = useState(''), [busy, setBusy] = useState(false);
-    React.useEffect(()=>{todos.setBusy(busy);},[busy]);
     const [confirmDiscard, setConfirmDiscard] = useState(false);
     const [deleteOpen,setDeleteOpen]=useState(false),deleteDialog=useRef(null);
     const [deletePreview,setDeletePreview]=useState(null);
@@ -97,9 +100,9 @@ if (document.getElementById('projectbook-editor-app')) {
     const targetPath = () => isNew ? [...destination.current.split('/').slice(0, -1), name.current.trim()].join('/') : path;
     const [summary, setSummary] = useState((isNew ? 'Created ' : 'Updated ') + path);
     const picker = useRef(null), container = useRef(null);
-    const dirty = () => (titleEditing && titleValue.trim() !== displayTitle) || current.current !== initial || pending.current.length > 0 || targetPath() !== path || todos.visiblePending().length > 0;
+    const dirty = () => (titleEditing && titleValue.trim() !== displayTitle) || current.current !== initial || pending.current.length > 0 || targetPath() !== path;
     window.projectbookEditorDirty = dirty;
-    const snapshot = () => ({ todos: todos.pending(), destination: destination.current, filename: name.current, content: current.current, files: pending.current.map(({url, ...file}) => file), etag: form.dataset.etag, saved: Date.now() });
+    const snapshot = () => ({ destination: destination.current, filename: name.current, content: current.current, files: pending.current.map(({url, ...file}) => file), etag: form.dataset.etag, saved: Date.now() });
     const stash = () => {
       clearTimeout(draftTimer.current);
       const data = snapshot();
@@ -113,7 +116,6 @@ if (document.getElementById('projectbook-editor-app')) {
     const change = (value, normalization) => {
       if (normalization) { normalized.current ??= value; return; }
       current.current = value === normalized.current ? initial : value;
-      todos.setDocument(current.current,path);
       setHasTextChanges(current.current !== initial);
       setHeadingTitle(documentTitle(current.current, ''));
       stashSoon();
@@ -129,7 +131,7 @@ if (document.getElementById('projectbook-editor-app')) {
       return () => window.removeEventListener('beforeunload', warn);
     }, []);
     const restore = () => {
-      todos.restore(draft.todos); todos.setDocument(draft.content,path);
+      // Legacy drafts retain their original Markdown; migrate saved books separately.
       pending.current.forEach(file => URL.revokeObjectURL(file.url));
       pending.current = (draft.files || []).map(file => ({...file, url: URL.createObjectURL(file.blob)}));
       setFiles([...pending.current]);
@@ -191,6 +193,75 @@ if (document.getElementById('projectbook-editor-app')) {
           ref.current.insertMarkdown(markdown);
           editor.update(() => { const selection = $getSelection(); if ($isRangeSelection(selection)) selection.insertParagraph(); }, {discrete: true});
         }
+      }
+    }
+    function openTodoTags(){
+      if(bridge.mode==='source'){
+        const view=EditorView.findFromDOM(container.current.querySelector('.cm-editor'));
+        const selection=view.state.selection.main,content=view.state.doc.toString();
+        const tasks=scanInlineTodos(content).tasks.filter(t=>selection.empty?t.start<=selection.from&&t.end>=selection.from:t.start<selection.to&&t.end>selection.from);
+        if(!tasks.length)throw Error('Select one or more TODOs to edit their tags.');
+        setTagSelection({tasks,view,content});
+      }else{
+        const editor=bridge.realm.getValue(rootEditor$);let tasks=[],range;
+        editor.getEditorState().read(()=>{range=$getSelection()?.clone();tasks=selectedTodoNodes($getSelection()).map(n=>({key:n.getKey(),title:n.getTextContent(),...n.getMetadata()}));});
+        if(!tasks.length)throw Error('Select one or more TODOs to edit their tags.');
+        setTagSelection({tasks,editor,range});
+      }
+    }
+    function applyTodoTags(patch){
+      const selected=tagSelection;
+      if(selected.view){
+        if(selected.view.state.doc.toString()!==selected.content){setStatus('The text changed. Select the TODOs again.');return;}
+        const updated=editTodoTags(selected.content,selected.tasks,patch);
+        selected.view.dispatch({changes:{from:0,to:selected.content.length,insert:updated}});selected.view.focus();
+      }else selected.editor.update(()=>{
+        if(selected.range)$setSelection(selected.range);
+        for(const task of selected.tasks){const node=$getNodeByKey(task.key);if(node?.getMetadata)node.setMetadata({...node.getMetadata(),tags:cleanTags([...node.getMetadata().tags.filter(t=>!patch.remove.includes(t)),...patch.add])});}
+      });
+    }
+    async function newTodos() {
+      const source=bridge.mode==='source';
+      const view=source && EditorView.findFromDOM(container.current.querySelector('.cm-editor'));
+      const editor=!source && bridge.realm.getValue(rootEditor$);
+      let selection, text='';
+      if(source) {
+        if(!view)throw new Error('Click in the Markdown editor and try again.');
+        selection=view.state.selection.main;
+        text=view.state.sliceDoc(selection.from,selection.to);
+      } else editor.getEditorState().read(()=>{
+        const current=$getSelection();
+        if($isRangeSelection(current)){selection=current.clone();text=current.getTextContent();}
+      });
+      const sourceSelection=source ? sourceTodoSelection(text,view.state.sliceDoc(selection.to,selection.to+2)) : null;
+      const titles=sourceSelection ? sourceSelection.titles : todoTitles(text);
+      const items=(titles.length?titles:['TODO']).map(title=>({title,done:'',tags:[]}));
+      if(!items)return;
+      if(!source && !selection){insert(todoMarkdown(items[0]),null,'todo');return;}
+      if(source) {
+        const markdown=titles.length ? sourceSelection.render(items.map(item=>todoMarkdown(item))) : text+todoMarkdown(items[0]);
+        view.dispatch({changes:{from:selection.from,to:selection.to,insert:markdown},selection:{anchor:selection.from+markdown.length}});
+        view.focus();
+      } else {
+        editor.update(()=>{
+          if(selection)$setSelection(selection);
+          const current=$getSelection();
+          if(!$isRangeSelection(current))return;
+          const endpoints=[current.anchor.getNode(),current.focus.getNode()];
+          const blocks=endpoints.flatMap(node=>[node,...node.getParents()]).filter(node=>['paragraph','heading','listitem'].includes(node.getType()));
+          const wholeBlock=blocks.some(node=>node.getTextContent().trim()===current.getTextContent().trim());
+          if((wholeBlock || items.length>1) && !current.isCollapsed()) {
+            current.removeText();
+            current.insertParagraph();
+          }
+          const nodes=[];
+          items.forEach(item=>{
+            const node=$createInlineTodo(item);
+            nodes.push(items.length>1 ? $createParagraphNode().append(node) : node);
+          });
+          $getSelection().insertNodes(nodes);
+        },{discrete:true});
+        editor.focus();
       }
     }
     function attach(list, event) {
@@ -304,7 +375,7 @@ if (document.getElementById('projectbook-editor-app')) {
         }catch(error){working.current=false;setBusy(false);setStatus(error.message);return;}
       }
       const data = new FormData();
-      data.append('document', JSON.stringify({path: savePath, source_path: path, content, move_revision:moveRevision, todos: pendingTodos(todos.pending(), current.current, path), create: isNew, etag: form.dataset.etag, attachments: used.map(file => ({path: file.path}))}));
+      data.append('document', JSON.stringify({path: savePath, source_path: path, content, move_revision:moveRevision, create: isNew, etag: form.dataset.etag, attachments: used.map(file => ({path: file.path}))}));
       data.append('message', !isNew && savePath !== path && summary === `Updated ${path}` ? `Move ${path} to ${savePath}` : summary === `Created ${path}` ? `Created ${savePath}` : summary || `Updated ${savePath}`);
       used.forEach(file => data.append('files[]', file.blob, file.name));
       try {
@@ -335,7 +406,7 @@ if (document.getElementById('projectbook-editor-app')) {
       return () => form.removeEventListener('submit', save);
     });
     const plugins = React.useMemo(() => [
-      integration(), todoPlugin({store:todos,path}), headingsPlugin(), listsPlugin(), quotePlugin(), calloutsPlugin(), footnotesPlugin(), thematicBreakPlugin(), linkPlugin(), linkDialogPlugin({onClickLinkCallback: source => {
+      integration(), enterModePlugin(), inlineTodoPlugin(), headingsPlugin(), listsPlugin(), quotePlugin(), calloutsPlugin(), footnotesPlugin(), thematicBreakPlugin(), linkPlugin(), linkDialogPlugin({onClickLinkCallback: source => {
         const local = pending.current.find(file => file.source === source);
         const url = local?.url || new URL(source, new URL(pageUrl, location.origin)).href;
         if (/^(https?:|blob:)/.test(url)) window.open(url, '_blank', 'noopener,noreferrer');
@@ -347,7 +418,7 @@ if (document.getElementById('projectbook-editor-app')) {
       codeMirrorPlugin({codeBlockLanguages: {text: 'Text', js: 'JavaScript', python: 'Python', sh: 'Shell', json: 'JSON', yaml: 'YAML', '': 'Plain'}}),
       markdownShortcutPlugin(), diffSourcePlugin({viewMode: /<!--|\[\[/.test(initial) ? 'source' : 'rich-text', diffMarkdown: initial}),
       toolbarPlugin({toolbarContents: () => {
-        const todoTools=<TodoToolbar store={todos} onError={setStatus} onInsert={(item,status)=>insert(todoLink(item,path,status),null,'todo')}/>;
+        const todoTools=<InlineTodoToolbar onNew={newTodos} onTags={openTodoTags} onError={setStatus} onList={()=>insert('\n\n'+todoListMarkdown({tags:[],status:'open'})+'\n\n',null)}/>;
         return <EditorToolbar sourceTools={<><span>Markdown</span>{todoTools}</>}>
           <UndoRedo/><Separator/><CalloutBlockType/><BoldItalicUnderlineToggles/><Separator/>
           <span className="pb-editor-list-tools"><ListsToggle/>{todoTools}</span><CreateLink/>{folderPage&&<button type="button" title="Insert dynamic subpages block" aria-label="Insert subpages" onClick={()=>insert('[Pages](#projectbook-pages)',null)}>☷</button>}<InsertFootnote/><InsertImage/><InsertTable/><InsertCodeBlock/>
@@ -427,7 +498,7 @@ if (document.getElementById('projectbook-editor-app')) {
       </div>}
       <div className="pb-editor-status" role="status" aria-live="polite">{status.startsWith('Title updated.') && !dirty() ? '' : status}</div>
       <div className="pb-change-state" role="status">{hasTextChanges || dirty() ? 'Unsaved changes' : 'No unsaved changes'}</div>
-      <TodoMessages store={todos}/>
+      {tagSelection && <TagsDialog tasks={tagSelection.tasks} available={todoCatalog.snapshot().tags} onClose={()=>setTagSelection(null)} onApply={applyTodoTags}/>}
       <div className="pb-content-label">Document content</div>
       <div id="projectbook-mdx" ref={container} aria-busy={busy}
         onKeyDown={event => {if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') save(event);}}

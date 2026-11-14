@@ -84,6 +84,105 @@ class LifecycleTests(unittest.TestCase):
         self.assertNotIn('token', self.m.public(self.book))
 
 
+class RagSafetyTests(unittest.TestCase):
+    def setUp(self):
+        LifecycleTests.setUp(self)
+        self.m.owned = Mock(return_value=None)
+        self.m.volume = Mock()
+        self.m.ensure_container = Mock()
+        self.docker.run.return_value = ''
+        self.env = patch.dict(os.environ, RAG_CGROUP_PARENT='', RAG_REQUIRE_CGROUP='false', RAG_MAX_ACTIVE='1')
+        self.env.start()
+        self.addCleanup(self.env.stop)
+
+    def test_active_worker_blocks_second_book_without_starting_resources(self):
+        self.docker.run.return_value = 'pb-other-book-rag'
+        with self.assertRaisesRegex(Problem, 'capacity'):
+            self.m.start_index(self.book, 'main')
+        self.m.ensure_container.assert_not_called()
+
+    def test_oom_worker_is_not_automatically_restarted(self):
+        self.m.owned.return_value = {'State': {'OOMKilled': True}}
+        with self.assertRaisesRegex(Problem, 'previously exceeded'):
+            self.m.start_index(self.book, 'main')
+        self.m.ensure_container.assert_not_called()
+
+    def test_worker_and_vectors_have_hard_limits_without_swap(self):
+        self.m.start_index(self.book, 'main')
+        for call in self.m.ensure_container.call_args_list:
+            args = call.kwargs['extra']
+            self.assertEqual(args[args.index('--memory') + 1], args[args.index('--memory-swap') + 1])
+            self.assertIn('--cpus', args)
+        self.assertEqual(self.m.ensure_container.call_args_list[-1].args[4]['PDF_MEMORY_MB'], '128')
+
+    def test_cloud_refuses_missing_shared_guard(self):
+        with patch.dict(os.environ, RAG_REQUIRE_CGROUP='true'):
+            with self.assertRaisesRegex(Problem, 'shared memory cgroup'):
+                self.m.start_index(self.book, 'main')
+        self.m.ensure_container.assert_not_called()
+
+    def test_cloud_refuses_unbounded_or_missing_cgroup(self):
+        self.docker.run.side_effect = lambda *a: '' if a[0] == 'ps' else json.dumps({'CgroupDriver': 'systemd', 'MemTotal': 4 * 1024**3})
+        with patch.dict(os.environ, RAG_CGROUP_PARENT='projectbookrag.slice', RAG_CGROUP_ROOT=self.temp.name):
+            with self.assertRaisesRegex(Problem, 'shared cgroup memory limit'):
+                self.m.start_index(self.book, 'main')
+        self.m.ensure_container.assert_not_called()
+
+    def test_host_memory_reserve_blocks_small_server(self):
+        self.docker.run.side_effect = lambda *a: '' if a[0] == 'ps' else json.dumps({'CgroupDriver': 'systemd', 'MemTotal': 2 * 1024**3})
+        with patch.dict(os.environ, RAG_CGROUP_PARENT='projectbookrag.slice'):
+            with self.assertRaisesRegex(Problem, 'insufficient host memory'):
+                self.m.start_index(self.book, 'main')
+        self.m.ensure_container.assert_not_called()
+
+    def test_existing_worker_receives_no_restart_and_no_swap(self):
+        self.m.owned.return_value = {'HostConfig': {'CgroupParent': ''}}
+        with patch.dict(os.environ, RAG_CGROUP_PARENT=''):
+            self.m.start_index(self.book, 'main')
+        updates = [c.args for c in self.docker.run.call_args_list if c.args[0] == 'update']
+        self.assertEqual(len(updates), 2)
+        self.assertTrue(all('--restart=no' in args and '--memory-swap' in args for args in updates))
+
+    def test_book_starts_when_search_is_rejected(self):
+        self.book['indexing'] = True
+        self.m.git = Mock(return_value={'branch': 'main'})
+        self.m.start_index = Mock(side_effect=Problem('RAG capacity reached', 503))
+        self.m.ensure_container.return_value = {'NetworkSettings': {'Ports': {'4567/tcp': [{'HostPort': '18000'}]}}}
+        self.m.rpc = Mock(return_value={'result': {'content': []}})
+        self.m.install(self.book)
+        saved = self.m.registry.get(self.book['id'])
+        self.assertEqual(saved['state'], 'ready')
+        self.assertEqual(saved['indexing_error'], 'RAG capacity reached')
+
+    def test_shared_guard_is_applied_to_both_roles(self):
+        group = Path(self.temp.name) / 'projectbookrag.slice'
+        group.mkdir()
+        for name, value in [('memory.max', '1342177280'), ('memory.swap.max', '0'), ('memory.current', '0')]:
+            (group / name).write_text(value)
+        self.docker.run.side_effect = lambda *a: '' if a[0] == 'ps' else json.dumps({'CgroupDriver': 'systemd', 'MemTotal': 4 * 1024**3})
+        original = Path.read_text
+        def read(path, *a, **k):
+            return 'MemAvailable: 2097152 kB' if str(path) == '/proc/meminfo' else original(path, *a, **k)
+        with patch.dict(os.environ, RAG_CGROUP_PARENT='projectbookrag.slice', RAG_CGROUP_ROOT=self.temp.name), patch('manager.Path.read_text', autospec=True, side_effect=read):
+            self.m.start_index(self.book, 'main')
+        for call in self.m.ensure_container.call_args_list:
+            args = call.kwargs['extra']
+            self.assertEqual(args[args.index('--cgroup-parent') + 1], 'projectbookrag.slice')
+        self.m.ensure_container.reset_mock()
+        def low(path, *a, **k):
+            return 'MemAvailable: 1024 kB' if str(path) == '/proc/meminfo' else original(path, *a, **k)
+        with patch.dict(os.environ, RAG_CGROUP_PARENT='projectbookrag.slice', RAG_CGROUP_ROOT=self.temp.name), patch('manager.Path.read_text', autospec=True, side_effect=low):
+            with self.assertRaisesRegex(Problem, 'not enough free host memory'):
+                self.m.start_index(self.book, 'main')
+        self.m.ensure_container.assert_not_called()
+
+    def test_rag_created_without_automatic_restart(self):
+        self.m.ensure_container = Manager.ensure_container.__get__(self.m)
+        self.m.ensure_container(self.book, 'rag', 'rag:test', [], {}, extra=['--memory', '896m'])
+        args = self.docker.run.call_args_list[0].args
+        self.assertEqual(args[args.index('--restart') + 1], 'no')
+
+
 class GatewayTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()

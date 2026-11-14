@@ -89,22 +89,11 @@ module Gollum
         destination!(wiki, target) if target != source
       end
       todo_changes = input.fetch('todos', [])
-      if todo_changes.is_a?(Array)
-        todo_changes = todo_changes.map do |item|
-          if item.is_a?(Hash) && item['kind'] == 'task' && item['expected_version'] == '' && !ProjectbookTasks.identity(target)
-            item.merge('source_path' => target)
-          else
-            item
-          end
-        end
-      end
+      raise Error.new('Legacy TODO writes are disabled. Reload the editor and use inline TODO definitions.',409) unless todo_changes == []
       if ProjectbookTasks.identity(source) || ProjectbookTasks.identity(target)
-        raise Error, 'TODO files have permanent paths. Change their title or list instead of moving them.' if source != target
-        data = ProjectbookTasks.parse(content, target).merge('expected_version' => input['create'] == true ? '' : input['etag'])
-        ProjectbookTasks.prepare(wiki, [data])
+        raise Error.new('Legacy TODO files are read-only. Migrate the book to inline TODO definitions.',409)
       end
-      tasks = ProjectbookTasks.prepare(wiki, todo_changes)
-      raise Error, 'The same TODO cannot be edited twice in one save.' if tasks.any? { |item| item[:path] == target }
+      tasks = []
       files = input.fetch('attachments', [])
       raise Error, 'Invalid attachments.' unless files.is_a?(Array) && files.length <= 30 && uploads.is_a?(Array) && files.length == uploads.length
       raise Error.new('File uploads are disabled.', 403) if !files.empty? && !wiki.allow_uploads

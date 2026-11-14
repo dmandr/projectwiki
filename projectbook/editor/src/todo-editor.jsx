@@ -1,5 +1,5 @@
 import React from 'react';
-import { DecoratorNode, $applyNodeReplacement, $createParagraphNode, $getNodeByKey, $getSelection, $isNodeSelection,
+import { SKIP_DOM_SELECTION_TAG, DecoratorNode, $applyNodeReplacement, $createParagraphNode, $getNodeByKey, $getSelection, $isNodeSelection,
   KEY_ARROW_UP_COMMAND, KEY_ARROW_DOWN_COMMAND, KEY_ARROW_LEFT_COMMAND, KEY_ARROW_RIGHT_COMMAND, KEY_ENTER_COMMAND, COMMAND_PRIORITY_HIGH } from 'lexical';
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
 import { realmPlugin, addLexicalNode$, addImportVisitor$, addExportVisitor$ } from '@mdxeditor/editor';
@@ -27,7 +27,7 @@ function TodoElement({nodeKey,reference}) {
   React.useEffect(()=>{
     if(reference.kind!=='task' || !task || !store.pending().some(item=>item.kind==='task' && item.id===task.id))return;
     const label='TODO: '+task.title;
-    editor.update(()=>{const node=$getNodeByKey(nodeKey);if(node && node.__ref.label!==label)node.setLabel(label);});
+    editor.update(()=>{const node=$getNodeByKey(nodeKey);if(node && node.__ref.label!==label)node.setLabel(label);},{tag:SKIP_DOM_SELECTION_TAG});
   },[task?.title,editor,nodeKey]);
   React.useEffect(()=>{
     if(reference.kind!=='task' || !task)return;
@@ -54,11 +54,24 @@ function TodoElement({nodeKey,reference}) {
       const selection=$getSelection();
       if (!$isNodeSelection(selection) || !selection.has(nodeKey)) return false;
       const node=$getNodeByKey(nodeKey),block=node?.getTopLevelElement();if(!block)return false;
-      const paragraph=$createParagraphNode();if(before)block.insertBefore(paragraph);else block.insertAfter(paragraph);paragraph.selectStart();event?.preventDefault();return true;
+      // Arrow navigation must never create document content. Select the exact
+      // inline boundary, including when two tasks share one paragraph.
+      if(before)node.selectPrevious();else node.selectNext();
+      if(cmd===KEY_ENTER_COMMAND){const selection=$getSelection();selection?.insertParagraph();}
+      event?.preventDefault();return true;
     },COMMAND_PRIORITY_HIGH));
     return ()=>remove.forEach(fn=>fn());
   },[editor,nodeKey]);
-  return <span contentEditable={false}>{reference.kind==='task'?<TaskRow store={store} id={reference.id} direct editDetails wrapped={wrapped}/>:<TodoList store={store} id={reference.id} status={reference.status}/>}</span>;
+  return <span contentEditable={false}>{reference.kind==='task'?<TaskRow store={store} id={reference.id} direct editDetails wrapped={wrapped} onBoundary={(before,action)=>{
+    editor.update(()=>{
+      const node=$getNodeByKey(nodeKey);if(!node)return;
+      if(before)node.selectPrevious();else node.selectNext();
+      const selection=$getSelection();
+      if(action==='break')selection?.insertLineBreak();
+      if(action==='paragraph')selection?.insertParagraph();
+    });
+    editor.focus(undefined,{defaultSelection:'rootEnd'});
+  }}/>:<TodoList store={store} id={reference.id} status={reference.status}/>}</span>;
 }
 export const todoPlugin=realmPlugin({init(realm,options){
   store=options.store;
