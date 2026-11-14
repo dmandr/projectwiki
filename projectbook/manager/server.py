@@ -84,6 +84,13 @@ def handler(manager, gateway, auth, kind):
                 raise Problem('Empty or oversized request.', 413)
             return json.loads(self.rfile.read(size))
 
+        def manager_version(self):
+            from updates import latest
+            release=latest('manager')
+            obj=manager.docker.inspect(os.environ.get('HOSTNAME',''))
+            image=manager.docker.inspect(obj['Image'],'image')
+            return {'current':os.environ.get('PROJECTBOOK_VERSION','development'),'latest':release['version'],'target':release['image'],'available':not (obj['Config']['Image']==release['image'] or release['image'] in image.get('RepoDigests',[]) or obj['Image']==release['configs'].get(image.get('Architecture')))}
+
         def do_GET(self):
             try:
                 if self.path == '/health':
@@ -117,7 +124,7 @@ def handler(manager, gateway, auth, kind):
                     from updates import latest, version
                     try:
                         releases = {role: latest(role) for role in ('wiki','rag')}
-                        self.send(200, {'manager': os.environ.get('PROJECTBOOK_VERSION','development'), 'books': {b['id']: {role: version(manager,b,releases[role],role) for role in releases if role=='wiki' or b.get('indexing')} for b in manager.registry.books() if b['state'] != 'removed'}})
+                        self.send(200, {'manager': self.manager_version(), 'books': {b['id']: {role: version(manager,b,releases[role],role) for role in releases if role=='wiki' or b.get('indexing')} for b in manager.registry.books() if b['state'] != 'removed'}})
                     except Exception:
                         self.send(200, {'books': {}, 'error': 'Release check unavailable; retry shortly.'})
                 elif self.path == '/api/resources':
@@ -154,6 +161,18 @@ def handler(manager, gateway, auth, kind):
                 data = self.body()
                 if not isinstance(data, dict):
                     raise Problem('Expected an object.')
+                if self.path == '/api/manager/update':
+                    if manager.active:raise Problem('Wait for book operations to finish.',409)
+                    current=self.manager_version()
+                    if data.get('target')!=current['target'] or not current['available']:raise Problem('Refresh available Manager version.',409)
+                    manager.docker.run('pull',current['target'],timeout=900)
+                    obj=manager.docker.inspect(os.environ.get('HOSTNAME',''))
+                    mounts=['--mount','type=bind,src=/var/run/docker.sock,dst=/var/run/docker.sock']
+                    state=next((m for m in obj['Mounts'] if m['Destination']=='/data' and m['Type']=='bind'),None)
+                    if state:mounts+=['--mount','type=bind,src='+str(Path(state['Source']).parent)+',dst=/deployment']
+                    manager.docker.run('run','-d','--name','projectbook-manager-updater-'+str(__import__('time').time_ns()),*mounts,'--entrypoint','python',obj['Image'],'-m','manager_update',obj['Id'],current['target'])
+                    self.send(202,{'started':True})
+                    return
                 if self.path == '/api/github/connect':
                     url, cookie = manager.github.begin(principal)
                     self.send(200, {'url': url}, headers={'Set-Cookie': 'pb_github_flow=' + cookie +
@@ -184,13 +203,13 @@ def handler(manager, gateway, auth, kind):
                     from updates import latest, version
                     b = manager.registry.get(update_match[1])
                     if b['state'] != 'ready': raise Problem('Book must be ready before updating.',409)
-                    role=data.get('role','wiki')
-                    if role not in ('wiki','rag'):raise Problem('Unknown update component.')
-                    release = latest(role)
-                    if data.get('target') != release['image']: raise Problem('Release changed. Refresh and retry.',409)
-                    if not version(manager,b,release,role)['available']: raise Problem('Book is already up to date.',409)
-                    manager.registry.update(b['id'], update_target=release['image'],update_role=role,dependency_backup='')
-                    manager.start(b['id'],'update')
+                    roles=['wiki']+(['rag'] if b.get('indexing') else [])
+                    releases={role:latest(role) for role in roles}
+                    targets=data.get('targets',{})
+                    if any(targets.get(role)!=releases[role]['image'] for role in roles):raise Problem('Release changed. Refresh and retry.',409)
+                    if not any(version(manager,b,releases[role],role)['available'] for role in roles):raise Problem('Book is already up to date.',409)
+                    manager.registry.update(b['id'],update_targets=targets)
+                    manager.start(b['id'],'update_book')
                     self.send(202, {'started': True})
                     return
                 users_match = re.fullmatch(r'/api/books/([a-f0-9]{12})/users', self.path)

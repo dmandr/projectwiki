@@ -26,6 +26,10 @@ class UpdatesTest(unittest.TestCase):
     def test_interruption_restores_checkpoint(self,api):
         m=self.manager();updates.recover(m,{'id':'x','update_backup':'wiki-rollback-1'})
         api.assert_called_with('POST','/containers/wiki-rollback-1/rename?name=wiki');m.docker.run.assert_any_call('start','wiki')
+    def test_pinned_manifest_reference_is_up_to_date(self):
+        m=self.manager();m.owned.return_value['Config']['Image']=self.release()['image'];m.docker.inspect.return_value={'Architecture':'amd64','Config':{'Labels':{}}}
+        self.assertFalse(updates.version(m,{'id':'x'},self.release())['available'])
+
     def test_same_platform_image_is_up_to_date(self):
         m=self.manager();m.docker.inspect.return_value={'Architecture':'amd64','Config':{'Labels':{}}};r=self.release();r['configs']['amd64']='sha256:old';self.assertFalse(updates.version(m,{'id':'x'},r)['available'])
     @patch('updates.requests.get')
@@ -39,3 +43,15 @@ class UpdatesTest(unittest.TestCase):
         m=self.manager();m.docker.inspect.return_value={'Id':'sha256:old'}
         updates.prepare_dependency(m,{'id':'x'},{'qdrant_image':'qdrant/qdrant:v1.20.0'})
         self.assertEqual(m.docker.run.call_count,1)
+    @patch('updates.version',return_value={'available':True})
+    @patch('updates.update')
+    @patch('updates.latest')
+    def test_combined_updates_both_roles(self,latest,update,version):
+        from manager import Registry
+        import tempfile
+        with tempfile.TemporaryDirectory() as folder:
+            m=self.manager();m.registry=Registry(folder);b={'id':'x','state':'ready','indexing':True,'update_targets':{'wiki':'wiki-image','rag':'rag-image'}};m.registry.data['books']['x']=b
+            latest.side_effect=lambda role:{'image':role+'-image'}
+            def apply(manager,book):manager.registry.update('x',update_phase='complete',update_backup=book['update_role']+'-backup')
+            update.side_effect=apply;updates.update_book(m,b)
+            self.assertEqual([c.args[1]['update_role'] for c in update.call_args_list],['wiki','rag']);self.assertFalse(m.registry.get('x')['bundle_active'])

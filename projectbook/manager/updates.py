@@ -15,8 +15,8 @@ _cache = {}
 _guard = threading.Lock()
 
 def latest(role="wiki"):
-    if role not in ("wiki","rag"):raise Problem("Unknown update component.")
-    repository="dmandr/projectbook" if role=="wiki" else "dmandr/projectbook-rag"
+    if role not in ("wiki","rag","manager"):raise Problem("Unknown update component.")
+    repository={"wiki":"dmandr/projectbook","rag":"dmandr/projectbook-rag","manager":"dmandr/projectbook-manager"}[role]
     global _cache
     with _guard:
         if role in _cache and time.monotonic()-_cache[role][0]<120:return _cache[role][1]
@@ -61,7 +61,7 @@ def version(manager,b,release,role="wiki"):
     arch=image.get('Architecture');label=image.get('Config',{}).get('Labels') or {}
     current=(label.get('org.opencontainers.image.revision') if obj['Config']['Image'].startswith('ghcr.io/dmandr/') else None) or b.get('installed_revision' if role=='wiki' else 'rag_installed_revision') or obj['Config']['Image']
     return {'current':current[:12] if len(current)==40 else current,'latest':release['version'],
-            'available':release['configs'].get(arch)!=obj['Image'],'target':release['image']}
+            'available':not (obj['Config']['Image']==release['image'] or release['image'] in image.get('RepoDigests',[]) or release['configs'].get(arch)==obj['Image']),'target':release['image']}
 
 def update(manager,b):
     role=b.get('update_role','wiki');target=b.get('update_target');release=latest() if role=='wiki' else latest(role)
@@ -115,7 +115,14 @@ def recover(manager,b):
         docker_api('POST','/containers/'+backup+'/rename?name='+name)
     if role=='rag':restore_dependency(manager,b)
     if manager.owned(b,name):manager.docker.run('start',name)
-    manager.registry.update(b['id'],state='ready',update_phase='rolled_back',error='Interrupted update; previous Wiki restored.')
+    for previous_role, previous_backup in reversed(list(b.get('bundle_backups',{}).items())):
+        if previous_role==role:continue
+        previous_name=manager.name(b,previous_role)
+        if manager.owned(b,previous_backup):
+            if manager.owned(b,previous_name):manager.docker.run('rm','-f',previous_name)
+            docker_api('POST','/containers/'+previous_backup+'/rename?name='+previous_name)
+            manager.docker.run('start',previous_name)
+    manager.registry.update(b['id'],state='ready',bundle_active=False,update_phase='rolled_back',error='Interrupted update; previous containers restored.')
 
 
 def prepare_dependency(manager,b,release):
@@ -159,3 +166,29 @@ def restore_dependency(manager,b):
         if manager.owned(b,name):manager.docker.run('rm','-f',name)
         docker_api('POST','/containers/'+backup+'/rename?name='+name)
     if manager.owned(b,name):manager.docker.run('start',name)
+
+
+def update_book(manager,b):
+    roles=['wiki']+(['rag'] if b.get('indexing') else [])
+    releases={role:latest(role) for role in roles}
+    targets=b.get('update_targets',{})
+    if any(targets.get(role)!=releases[role]['image'] for role in roles):raise Problem('Release changed; refresh before updating.',409)
+    completed=[]
+    manager.registry.update(b['id'],bundle_active=True,bundle_backups={})
+    try:
+        for role in roles:
+            if not version(manager,b,releases[role],role)['available']:continue
+            manager.registry.update(b['id'],update_role=role,update_target=targets[role],update_backup='',dependency_backup='')
+            update(manager,manager.registry.get(b['id']))
+            current=manager.registry.get(b['id'])
+            if current.get('update_phase')!='complete':raise Problem('Component update failed.',503)
+            completed.append((role,current['update_backup']))
+            manager.registry.update(b['id'],state='updating',bundle_backups=dict(completed))
+        manager.registry.update(b['id'],state='ready',bundle_active=False,update_phase='complete',error='')
+    except Exception:
+        for role,backup in reversed(completed):
+            name=manager.name(b,role)
+            if manager.owned(b,backup):
+                if manager.owned(b,name):manager.docker.run('rm','-f',name)
+                docker_api('POST','/containers/'+backup+'/rename?name='+name);manager.docker.run('start',name)
+        manager.registry.update(b['id'],state='ready',bundle_active=False,update_phase='rolled_back',error='Book update failed; previous containers restored.')

@@ -18,7 +18,7 @@ function render() {
     if(b.state==='error'){const retry=el('button','quiet','Retry');retry.onclick=async()=>{retry.disabled=true;try{await api('/api/books/'+b.id+'/retry',{});await refresh();}catch(e){notice(e.message);retry.disabled=false;}};actions.append(retry);}
     if(['ready','error'].includes(b.state)){const remove=el('button','quiet','Remove');remove.onclick=()=>{removing=b;$('#remove-title').textContent='Remove '+b.name+'?';$('#remove-confirm').value='';$('#remove-error').textContent='';$('#remove-dialog').showModal();};actions.append(remove);}
     const components=versions[b.id];
-    if(components){for(const [role,ver] of Object.entries(components)){const label=role==='wiki'?'Wiki':'RAG';const row=el('div','details');row.append(el('span','',`${label}: ${ver.current} · Latest: ${ver.latest}`));if(ver.available&&b.state==='ready'){const update=el('button','quiet',`Update ${label}`);update.onclick=async()=>{if(!confirm(`Update ${label} for ${b.name}? The service will restart briefly.`))return;update.disabled=true;try{await api('/api/books/'+b.id+'/update',{role,target:ver.target});await refresh();}catch(e){notice(e.message);update.disabled=false;}};row.append(update);}info.append(row);}}
+    if(components){for(const [role,ver] of Object.entries(components)){info.append(el('p','hint',`${role==='wiki'?'Wiki':'RAG'}: ${ver.current} · Latest: ${ver.latest}`));}if(Object.values(components).some(v=>v.available)&&b.state==='ready'){const row=el('div','details');row.append(el('span','badge','Update available'));const update=el('button','compact-update','Update');update.onclick=async()=>{update.disabled=true;try{await api('/api/books/'+b.id+'/update',{targets:Object.fromEntries(Object.entries(components).map(([k,v])=>[k,v.target]))});await refresh();}catch(e){notice(e.message);update.disabled=false;}};row.append(update);info.append(row);}}
     else if(b.state!=='removed')info.append(el('p','hint',versionError||'Checking releases…'));
     main.append(info,actions);card.append(main);
     if(b.error)card.append(el('p','error',b.error));
@@ -30,7 +30,7 @@ function render() {
     root.append(card);
   }
 }
-async function refresh(){if(busy)return;busy=true;try{const data=await api('/api/books');books=data.books;mcpUrl=data.mcp_url;cf=data.cloudflare||{};gh=await api('/api/github');configureCloudflare();configureGitHub();$('#mcp-url').textContent=mcpUrl;$('#connection').textContent=data.auth_mode==='local'?'Local development':'Cloudflare protected';render();for(const b of books.filter(b=>b.state==='ready'&&b.indexing)){const data=await api('/api/books/'+b.id+'/index');const node=document.querySelector('[data-index="'+b.id+'"]');if(node)node.textContent='Search: '+(data.state||'starting')+(data.phase?' · '+data.phase:'')+(data.processed_files?' · '+data.processed_files+' files':'');}}catch(e){notice(e.message);$('#connection').textContent='Connection unavailable';}finally{busy=false;}}
+async function refresh(){if(busy)return;busy=true;try{const data=await api('/api/books');const finished=data.books.some(b=>b.state==='ready'&&books.some(old=>old.id===b.id&&old.state!=='ready'));books=data.books;if(finished)await refreshVersions();mcpUrl=data.mcp_url;cf=data.cloudflare||{};gh=await api('/api/github');configureCloudflare();configureGitHub();$('#mcp-url').textContent=mcpUrl;$('#connection').textContent=data.auth_mode==='local'?'Local development':'Cloudflare protected';render();for(const b of books.filter(b=>b.state==='ready'&&b.indexing)){const data=await api('/api/books/'+b.id+'/index');const node=document.querySelector('[data-index="'+b.id+'"]');if(node)node.textContent='Search: '+(data.state||'starting')+(data.phase?' · '+data.phase:'')+(data.processed_files?' · '+data.processed_files+' files':'');}}catch(e){notice(e.message);$('#connection').textContent='Connection unavailable';}finally{busy=false;}}
 $('#new-book').onclick=async()=>{try{await loadPeople();renderPicker('#create-people',[]);$('#create-panel').hidden=false;$('#create-form input').focus();}catch(e){notice(e.message);}};
 $('#close-create').onclick=()=>{$('#create-panel').hidden=true;};
 $('#show-removed').onchange=render;
@@ -98,7 +98,7 @@ async function refreshResources(force=false){
 }
 setInterval(refreshResources,15000);
 
-async function refreshVersions(){try{const r=await api("/api/versions");versions=r.books;if(r.manager)managerVersion.textContent=' · Manager '+r.manager;versionError=r.error||"";render();}catch(e){versionError="Release check unavailable";render();}}
+async function refreshVersions(){try{const r=await api("/api/versions");versions=r.books;if(r.manager){managerVersion.replaceChildren(el('span','',` · Manager ${r.manager.current} · Latest: ${r.manager.latest}`));if(r.manager.available){const u=el('button','compact-update','Update');u.onclick=async()=>{u.disabled=true;try{await api('/api/manager/update',{target:r.manager.target});notice('Manager is updating; reconnecting…');setTimeout(()=>location.reload(),12000);}catch(e){notice(e.message);u.disabled=false;}};managerVersion.append(u);}}versionError=r.error||"";render();}catch(e){versionError="Release check unavailable";render();}}
 setTimeout(refreshVersions,0);setInterval(refreshVersions,120000);
 
 const managerVersion=el('span','hint','');$('footer').append(managerVersion);

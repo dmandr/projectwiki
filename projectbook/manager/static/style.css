@@ -6,3 +6,5 @@ fieldset{border:1px solid var(--line);border-radius:8px;padding:14px 16px}legend
 .resources-dialog{width:min(1100px,94vw);max-width:94vw}.resources-dialog>button{float:right}.resource-link{margin-left:1rem;font-size:.85rem;text-decoration:underline}
 
 button.resource-link{border:0;background:none;padding:0;box-shadow:none}
+
+button.compact-update,.actions button,.actions a{font-size:.82rem;padding:5px 9px;border-radius:5px;min-height:28px}.details{gap:8px}

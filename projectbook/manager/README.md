@@ -188,3 +188,11 @@ hidden RAG dependency selected by `io.projectbook.qdrant.image` in the RAG image
 stopped storage volume to a new managed volume before replacement. Rollback
 uses the original container and untouched original volume. Manager version is
 shown in the footer; it is updated by deployment, not from a book card.
+
+Book updates use one Update button for Wiki and RAG. Pinned manifest references
+are compared directly as well as platform config IDs (Docker engines may expose
+either). Versions refresh immediately after an operation completes. No browser
+confirmation popup is used for updates. Manager update is a separate footer
+button; an independent helper preserves its mounts/ports and restores the old
+container if readiness fails. Its Compose .env image reference is updated only
+after success. Qdrant remains a hidden RAG dependency.

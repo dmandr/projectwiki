@@ -117,7 +117,7 @@ class Manager:
         self.github = GitHub(self.registry)
         # Interrupted work is recoverable and never silently treated as successful.
         for b in self.registry.books():
-            if b.get('action') == 'update' and b['state'] not in ('ready','removed','error'):
+            if b.get('action') in ('update','update_book') and b['state'] not in ('ready','removed','error'):
                 from updates import recover
                 recover(self,b)
                 continue
@@ -197,6 +197,10 @@ class Manager:
 
     def public(self, b):
         return {k: v for k, v in b.items() if k != 'token'}
+
+    def update_book(self, b):
+        from updates import update_book
+        update_book(self,b)
 
     def update(self, b):
         from updates import update
