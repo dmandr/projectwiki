@@ -117,6 +117,10 @@ class Manager:
         self.github = GitHub(self.registry)
         # Interrupted work is recoverable and never silently treated as successful.
         for b in self.registry.books():
+            if b.get('action') == 'update' and b['state'] not in ('ready','removed','error'):
+                from updates import recover
+                recover(self,b)
+                continue
             if b['state'] not in ('ready', 'removed', 'error'):
                 self.registry.update(b['id'], state='error', error='Manager restarted during operation. Retry to continue.',
                                      failed_action=b.get('action', 'install'))
@@ -194,6 +198,10 @@ class Manager:
     def public(self, b):
         return {k: v for k, v in b.items() if k != 'token'}
 
+    def update(self, b):
+        from updates import update
+        update(self, b)
+
     def people(self):
         with self.registry.lock:
             return copy.deepcopy(list(self.registry.data.get('people', {}).values()))
@@ -238,12 +246,16 @@ class Manager:
     def start(self, book_id, action):
         with self.guard:
             b = self.registry.get(book_id)
+            if action == 'update' and b['state'] not in ('ready','error'):
+                raise Problem('Book must be ready before updating.',409)
             if book_id in self.active:
                 raise Problem('An operation is already running for this book.', 409)
             if action == 'remove' and b['state'] == 'removed':
                 return
             if action == 'install' and b['state'] == 'removed':
                 raise Problem('This installation has been removed. Create a new one to clone Git again.', 409)
+            if action == 'update':
+                self.registry.update(book_id,update_backup='',update_previous_image='')
             self.active.add(book_id)
             self.registry.update(book_id, state='queued', action=action, error='')
             threading.Thread(target=self.job, args=(book_id, action), daemon=True).start()

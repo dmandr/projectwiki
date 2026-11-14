@@ -1,11 +1,11 @@
 const $ = selector => document.querySelector(selector);
-let books = [], mcpUrl = '', removing = null, lastRender = '', busy = false, cf = {}, editingUsers = null, people = [], gh = {};
-const states = {preparing_repository:"Preparing GitHub repository",protecting:'Protecting address',publishing:'Publishing address',updating_access:'Updating access',queued:'Queued',cloning:'Cloning repository',starting:'Starting services',ready:'Ready',saving:'Saving to Git',removing:'Removing',removed:'Removed',error:'Needs attention'};
+let versions = {}, versionError = "", books = [], mcpUrl = '', removing = null, lastRender = '', busy = false, cf = {}, editingUsers = null, people = [], gh = {};
+const states = {preparing_repository:"Preparing GitHub repository",protecting:'Protecting address',publishing:'Publishing address',updating_access:'Updating access',updating:'Updating Wiki',queued:'Queued',cloning:'Cloning repository',starting:'Starting services',ready:'Ready',saving:'Saving to Git',removing:'Removing',removed:'Removed',error:'Needs attention'};
 function el(tag, cls, text) { const node = document.createElement(tag); if(cls)node.className=cls;if(text!==undefined)node.textContent=text;return node; }
 async function api(path, data) { const response = await fetch(path, data===undefined ? {} : {method:'POST',headers:{'Content-Type':'application/json','X-ProjectBook-Request':'1'},body:JSON.stringify(data)});const value=await response.json();if(!response.ok)throw Error(value.error||'Request failed');return value; }
 function notice(message) { $('#notice').textContent=message;$('#notice').hidden=!message; }
 function render() {
-  const showRemoved=$('#show-removed').checked;const key=JSON.stringify([books,showRemoved]);if(key===lastRender)return;lastRender=key;
+  const showRemoved=$('#show-removed').checked;const key=JSON.stringify([books,showRemoved,versions,versionError]);if(key===lastRender)return;lastRender=key;
   const root=$('#books');root.replaceChildren();$('#book-count').textContent=books.filter(b=>b.state!=='removed').length;
   const shown=books.filter(b=>showRemoved||b.state!=='removed').reverse();
   if(!shown.length){const empty=el('div','empty');empty.append(el('h3','', 'Your next book starts here.'),el('p','','Give it a name, a web address and a Git repository. Project Book takes care of the installation.'));root.append(empty);}
@@ -17,6 +17,9 @@ function render() {
     if(b.cloudflare?.app_id&&b.cloudflare?.dns_id&&['ready','error'].includes(b.state)){const users=el('button','quiet','People');users.onclick=async()=>{try{await loadPeople();editingUsers=b;$('#users-title').textContent=b.name;renderPicker('#edit-people',b.users||[]);$('#users-error').textContent='';$('#users-dialog').showModal();}catch(e){notice(e.message);}};actions.append(users);}
     if(b.state==='error'){const retry=el('button','quiet','Retry');retry.onclick=async()=>{retry.disabled=true;try{await api('/api/books/'+b.id+'/retry',{});await refresh();}catch(e){notice(e.message);retry.disabled=false;}};actions.append(retry);}
     if(['ready','error'].includes(b.state)){const remove=el('button','quiet','Remove');remove.onclick=()=>{removing=b;$('#remove-title').textContent='Remove '+b.name+'?';$('#remove-confirm').value='';$('#remove-error').textContent='';$('#remove-dialog').showModal();};actions.append(remove);}
+    const components=versions[b.id];
+    if(components){for(const [role,ver] of Object.entries(components)){const label=role==='wiki'?'Wiki':'RAG';const row=el('div','details');row.append(el('span','',`${label}: ${ver.current} · Latest: ${ver.latest}`));if(ver.available&&b.state==='ready'){const update=el('button','quiet',`Update ${label}`);update.onclick=async()=>{if(!confirm(`Update ${label} for ${b.name}? The service will restart briefly.`))return;update.disabled=true;try{await api('/api/books/'+b.id+'/update',{role,target:ver.target});await refresh();}catch(e){notice(e.message);update.disabled=false;}};row.append(update);}info.append(row);}}
+    else if(b.state!=='removed')info.append(el('p','hint',versionError||'Checking releases…'));
     main.append(info,actions);card.append(main);
     if(b.error)card.append(el('p','error',b.error));
     if(b.sync)card.append(el('p',b.sync.ok?'hint':'error',b.sync.ok?'Git synchronized · '+b.sync.revision.slice(0,12)+' · '+new Date(b.sync.checked_at*1000).toLocaleString():'Git sync: '+b.sync.error));
@@ -94,3 +97,8 @@ async function refreshResources(force=false){
   finally{resourcesBusy=false;}
 }
 setInterval(refreshResources,15000);
+
+async function refreshVersions(){try{const r=await api("/api/versions");versions=r.books;if(r.manager)managerVersion.textContent=' · Manager '+r.manager;versionError=r.error||"";render();}catch(e){versionError="Release check unavailable";render();}}
+setTimeout(refreshVersions,0);setInterval(refreshVersions,120000);
+
+const managerVersion=el('span','hint','');$('footer').append(managerVersion);

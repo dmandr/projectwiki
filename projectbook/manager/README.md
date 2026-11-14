@@ -165,3 +165,26 @@ clear previously configured limits). The admin-only `/api/resources` endpoint
 shows host memory/swap and Docker container CPU/memory/process statistics, cached
 for 10 seconds. The main UI refreshes every 15 seconds while visible. Docker's
 memory denominator is host RAM when no container limit is set.
+
+## Wiki version and Update
+
+Book cards show the running image revision and the latest fully successful
+`ProjectBook container images` release from the master branch. Public GHCR
+manifests select the matching Linux architecture; the update pins the index
+digest, not a mutable tag. Release discovery is cached for two minutes.
+Update is admin-only, requires the displayed target, and serializes with other
+book operations. It pulls before stopping, synchronizes Git while web writes
+are stopped, and replaces only the Wiki container with the same mounts, ports,
+environment and labels. Health and MCP readiness must pass; otherwise the
+previous container is restored. Interrupted replacement uses a registry
+checkpoint to restore the previous container when Manager restarts. Old
+containers are retained for rollback. This does not migrate document formats
+or update Manager, Qdrant or RAG. GitHub/GHCR outages show an unavailable status
+and do not interrupt the book.
+
+Book cards expose separate Wiki and RAG versions and updates. Qdrant is a
+hidden RAG dependency selected by `io.projectbook.qdrant.image` in the RAG image
+(the legacy release fallback is v1.20.0). A database version change copies the
+stopped storage volume to a new managed volume before replacement. Rollback
+uses the original container and untouched original volume. Manager version is
+shown in the footer; it is updated by deployment, not from a book card.

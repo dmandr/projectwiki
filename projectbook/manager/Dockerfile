@@ -5,6 +5,8 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY *.py ./
 COPY static ./static
+ARG PROJECTBOOK_VERSION=development
+ENV PROJECTBOOK_VERSION=$PROJECTBOOK_VERSION
 ENV PYTHONUNBUFFERED=1
 HEALTHCHECK --interval=20s --timeout=5s CMD python -c 'import urllib.request; urllib.request.urlopen("http://127.0.0.1:8070/health", timeout=3)'
 CMD ["python", "server.py"]

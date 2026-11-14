@@ -7,3 +7,5 @@ COPY *.py ./
 ENV PYTHONUNBUFFERED=1 TOKENIZERS_PARALLELISM=false HF_HUB_DISABLE_TELEMETRY=1
 HEALTHCHECK --interval=20s --timeout=5s --start-period=30s CMD python -c 'import urllib.request; urllib.request.urlopen("http://127.0.0.1:8090/health", timeout=3)'
 CMD ["python", "service.py"]
+
+LABEL io.projectbook.qdrant.image="qdrant/qdrant:v1.20.0"

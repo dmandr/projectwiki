@@ -113,6 +113,13 @@ def handler(manager, gateway, auth, kind):
                     self.send(200, {'books': [manager.public(b) for b in books], 'auth_mode': auth.mode,
                                     'mcp_url': os.environ.get('MCP_PUBLIC_URL', 'http://127.0.0.1:8071/mcp'),
                                     'cloudflare': manager.cloudflare.status()})
+                elif self.path == '/api/versions':
+                    from updates import latest, version
+                    try:
+                        releases = {role: latest(role) for role in ('wiki','rag')}
+                        self.send(200, {'manager': os.environ.get('PROJECTBOOK_VERSION','development'), 'books': {b['id']: {role: version(manager,b,releases[role],role) for role in releases if role=='wiki' or b.get('indexing')} for b in manager.registry.books() if b['state'] != 'removed'}})
+                    except Exception:
+                        self.send(200, {'books': {}, 'error': 'Release check unavailable; retry shortly.'})
                 elif self.path == '/api/resources':
                     from resources import snapshot
                     self.send(200, snapshot(manager))
@@ -171,6 +178,20 @@ def handler(manager, gateway, auth, kind):
                 if person_match:
                     manager.remove_person(person_match[1])
                     self.send(200, {'removed': True})
+                    return
+                update_match = re.fullmatch(r'/api/books/([a-f0-9]{12})/update', self.path)
+                if update_match:
+                    from updates import latest, version
+                    b = manager.registry.get(update_match[1])
+                    if b['state'] != 'ready': raise Problem('Book must be ready before updating.',409)
+                    role=data.get('role','wiki')
+                    if role not in ('wiki','rag'):raise Problem('Unknown update component.')
+                    release = latest(role)
+                    if data.get('target') != release['image']: raise Problem('Release changed. Refresh and retry.',409)
+                    if not version(manager,b,release,role)['available']: raise Problem('Book is already up to date.',409)
+                    manager.registry.update(b['id'], update_target=release['image'],update_role=role,dependency_backup='')
+                    manager.start(b['id'],'update')
+                    self.send(202, {'started': True})
                     return
                 users_match = re.fullmatch(r'/api/books/([a-f0-9]{12})/users', self.path)
                 if users_match:

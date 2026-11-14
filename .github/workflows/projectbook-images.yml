@@ -39,6 +39,7 @@ jobs:
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
+          build-args: PROJECTBOOK_VERSION=${{ github.sha }}
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ghcr.io/dmandr/${{ matrix.image }}:sha-${{ github.sha }}
