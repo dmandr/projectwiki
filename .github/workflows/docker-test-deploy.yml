@@ -18,6 +18,7 @@ on:
 jobs:
   # Compile assets before docker build
   precompile-assets:
+    if: github.repository == 'gollum/gollum'
     runs-on: ubuntu-latest
     steps:
       - run: echo "Determining whether assets should be compiled..."

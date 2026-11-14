@@ -29,3 +29,9 @@
 !projectbook/editor/package-lock.json
 !projectbook/editor/build.mjs
 !projectbook/editor/src/**
+
+# Defense in depth: deployment credentials never enter any image.
+**/.env
+**/.env.*
+**/secrets/**
+**/.git/**

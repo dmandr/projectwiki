@@ -117,6 +117,9 @@
     document.getElementById('projectbook-empty').hidden = links.length !== 0;
     save();
   }
+  const treeActions = document.querySelector('.projectbook-tree-actions');
+  const homeRow = document.querySelector('#projectbook-tree [data-document="Home.md"]')?.parentElement;
+  if (homeRow && treeActions) { homeRow.classList.add('projectbook-book-root'); homeRow.append(treeActions); }
   document.getElementById('projectbook-expand').addEventListener('click', () => expandAll(true));
   document.getElementById('projectbook-collapse').addEventListener('click', () => expandAll(false));
   function applyFilter() {

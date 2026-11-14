@@ -3,6 +3,12 @@ require 'gollum/navigation_index'
 require 'gollum/projectbook_tree'
 
 module ProjectBookDocumentTree
+  def projectbook_book_title
+    wiki = Gollum::Wiki.new(Precious::App.gollum_path, Precious::App.wiki_options)
+    snapshot = (@projectbook_navigation_snapshot ||= Gollum::NavigationIndex.for(wiki))
+    snapshot.entries.find { |entry| entry.url_path == "Home.md" }&.title || "ProjectBook"
+  end
+
   def projectbook_tree_html
     wiki = Gollum::Wiki.new(Precious::App.gollum_path, Precious::App.wiki_options)
     snapshot = (@projectbook_navigation_snapshot ||= Gollum::NavigationIndex.for(wiki))
