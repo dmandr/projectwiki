@@ -89,7 +89,13 @@ def handler(manager, gateway, auth, kind):
             release=latest('manager')
             obj=manager.docker.inspect(os.environ.get('HOSTNAME',''))
             image=manager.docker.inspect(obj['Image'],'image')
-            return {'current':os.environ.get('PROJECTBOOK_VERSION','development'),'latest':release['version'],'target':release['image'],'available':not (obj['Config']['Image']==release['image'] or release['image'] in image.get('RepoDigests',[]) or obj['Image']==release['configs'].get(image.get('Architecture')))}
+            result = {'current':os.environ.get('PROJECTBOOK_VERSION','development'),'latest':release['version'],'target':release['image'],'available':not (obj['Config']['Image']==release['image'] or release['image'] in image.get('RepoDigests',[]) or obj['Image']==release['configs'].get(image.get('Architecture')))}
+            current=os.environ.get('PROJECTBOOK_VERSION','')
+            if result['available'] and re.fullmatch(r'[a-f0-9]{40}',current) and current!=release['revision']:
+                from updates import newer_release
+                result['available']=newer_release(current,release['revision'])
+            return result
+
 
         def do_GET(self):
             try:

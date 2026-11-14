@@ -192,3 +192,14 @@ def update_book(manager,b):
                 if manager.owned(b,name):manager.docker.run('rm','-f',name)
                 docker_api('POST','/containers/'+backup+'/rename?name='+name);manager.docker.run('start',name)
         manager.registry.update(b['id'],state='ready',bundle_active=False,update_phase='rolled_back',error='Book update failed; previous containers restored.')
+
+
+from functools import lru_cache
+@lru_cache(maxsize=64)
+def newer_release(current,target):
+    try:
+        r=requests.get('https://api.github.com/repos/dmandr/projectwiki/compare/'+current+'...'+target,timeout=10)
+        r.raise_for_status()
+        return r.json().get('status')=='ahead'
+    except requests.RequestException:
+        return False
