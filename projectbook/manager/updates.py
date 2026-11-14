@@ -59,7 +59,7 @@ def version(manager,b,release,role="wiki"):
     if not obj:return {'current':'Not installed','latest':release['version'],'available':False}
     image=manager.docker.inspect(obj['Image'],'image')
     arch=image.get('Architecture');label=image.get('Config',{}).get('Labels') or {}
-    current=label.get('org.opencontainers.image.revision') or b.get('installed_revision' if role=='wiki' else 'rag_installed_revision') or obj['Config']['Image']
+    current=(label.get('org.opencontainers.image.revision') if obj['Config']['Image'].startswith('ghcr.io/dmandr/') else None) or b.get('installed_revision' if role=='wiki' else 'rag_installed_revision') or obj['Config']['Image']
     return {'current':current[:12] if len(current)==40 else current,'latest':release['version'],
             'available':release['configs'].get(arch)!=obj['Image'],'target':release['image']}
 
