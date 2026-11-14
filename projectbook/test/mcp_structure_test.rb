@@ -5,9 +5,8 @@ class ProjectbookMCPStructureTest < ProjectbookMCPTest
   def test_move_preview_apply_updates_links_and_task_sources
     page=wiki.page('Home')
     Gollum::ProjectbookSave.save(wiki,{'path'=>'Home.md','content'=>"# Home\n\n[Engine](hardware/engine.md)\n",'etag'=>page.sha},[],{})
-    list='11111111-1111-4111-8111-111111111111'; task='22222222-2222-4222-8222-222222222222'
-    Gollum::ProjectbookTasks.save(wiki,[{'kind'=>'list','id'=>list,'title'=>'Work','expected_version'=>''},
-      {'kind'=>'task','id'=>task,'title'=>'Check','list_id'=>list,'status'=>'open','source_path'=>'hardware/engine.md','expected_version'=>''}],{})
+    engine=wiki.page('hardware/engine.md')
+    Gollum::ProjectbookSave.save(wiki,{'path'=>'hardware/engine.md','content'=>engine.text_data+"\n[TODO: Check](tags=Work)\n",'etag'=>engine.sha},[],{})
     rev=head
     args={source:'hardware',target:'current/hardware',expected_revision:rev}
     preview,error=tool('move_document',args);refute error;assert preview['dry_run'];assert_equal rev,head
@@ -17,7 +16,9 @@ class ProjectbookMCPStructureTest < ProjectbookMCPTest
     assert_equal saved['revision'],head
     assert_nil wiki.page('hardware/engine.md')
     assert_includes wiki.page('Home.md').text_data,'current/hardware/engine.md'
-    data,=tool('read_todo',{id:task});assert_equal 'current/hardware/engine.md',data['source_path'];assert_equal 'open',data['status']
+    data,error=tool('list_tasks',{query:'Check'});refute error
+    task=data['items'].find { |item| item['title']=='Check' };assert task
+    assert_equal 'current/hardware/engine.md',task['path'];assert_equal '',task['done']
     _,error=tool('move_document',args.merge(dry_run:false));assert error;assert_equal saved['revision'],head
   end
 
