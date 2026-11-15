@@ -196,3 +196,31 @@ confirmation popup is used for updates. Manager update is a separate footer
 button; an independent helper preserves its mounts/ports and restores the old
 container if readiness fails. Its Compose .env image reference is updated only
 after success. Qdrant remains a hidden RAG dependency.
+
+
+## Automatic releases and editor safety
+
+The footer **Auto Update** switch is deployment-wide, persisted in the private
+Manager registry, and off by default. Every two minutes the Manager checks the
+last fully successful published release. Books update as one Wiki/RAG bundle;
+Qdrant remains a compatible RAG dependency. Manager updates separately after
+book operations finish, using the existing independent rollback helper.
+
+An open document editor renews a server lease every 20 seconds. Closing the tab
+releases it; abandoned sessions expire after three minutes. A suspended tab stops
+accepting edits after two minutes and must reconnect before accepting input.
+Before replacement the Manager atomically checks leases and fences new editors.
+The fence survives container restart and is released after success or rollback.
+A failed status check blocks automatic replacement. Existing browser drafts and
+attachments remain in IndexedDB and are never automatically submitted or deleted.
+Old editors loaded before this feature must be reloaded once during rollout.
+A rolled-back release requires manual attention instead of an endless retry loop.
+
+Agent preferences are stored per book in `.projectbook/AGENTS.md`, in the book's
+Git history and hidden from navigation. `get_book_context` includes their full
+content; `get_agent_instructions` reads them separately. `set_agent_instructions`
+requires document-write permission, the previous blob version (empty for create),
+and defaults to a diff preview. Apply with `dry_run=false` only on user request.
+Preferences cannot override system/developer instructions. They contain no secrets.
+Tool discovery fails explicitly when no accessible ready book can advertise tools,
+rather than installing a successful catalogue containing only `list_books`.

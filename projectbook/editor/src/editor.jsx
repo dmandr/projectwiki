@@ -10,6 +10,7 @@ import { $createRangeSelection, $setSelection, $getSelection, $isRangeSelection,
 import {$getNodeByKey} from 'lexical';
 import { EditorView } from '@codemirror/view';
 import { draftStore } from './drafts';
+import { editingLease } from './editing-lease';
 import { rebaseMarkdown } from './move-links.mjs';
 import {confirmMove} from './move-preview.mjs';
 import { documentTitle, withDocumentTitle } from './document-title.mjs';
@@ -36,6 +37,7 @@ if (document.getElementById('projectbook-editor-app')) {
   const folderPath = path.slice(0,-10);
   const isNew = form.dataset.create === 'true';
   const base = window.baseUrl || '';
+  editingLease(form, base);
   const encodePath = value => value.split('/').map(part => encodeURIComponent(part).replace(/[!'()*]/g, c => '%' + c.charCodeAt(0).toString(16))).join('/');
   const pageUrl = base + '/' + encodePath(path);
   const parent = path.split('/').slice(0, -1).join('/');

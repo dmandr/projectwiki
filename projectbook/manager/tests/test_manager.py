@@ -284,3 +284,9 @@ class AuthTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+class DiscoveryFailureTests(unittest.TestCase):
+    def test_no_ready_books_does_not_publish_one_tool_catalog(self):
+        with tempfile.TemporaryDirectory() as folder:
+            gateway=Gateway(Manager(folder,Mock()))
+            with self.assertRaises(Problem):gateway.dispatch('tools/list',{},'owner')

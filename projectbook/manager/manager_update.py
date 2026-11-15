@@ -9,7 +9,9 @@ from updates import docker_api
 def perform(ident,target):
     old=docker_api('GET','/containers/'+ident+'/json');name=old['Name'].lstrip('/');backup=name+'-rollback-'+str(int(time.time()))
     body=copy.deepcopy(old['Config']);body.update(Image=target,Hostname='',HostConfig=old['HostConfig'])
-    body['Env']=[('MANAGER_IMAGE='+target if v.startswith('MANAGER_IMAGE=') else v) for v in body['Env']]
+    image=docker_api('GET','/images/'+target+'/json')
+    version=next((v for v in image['Config'].get('Env',[]) if v.startswith('PROJECTBOOK_VERSION=')), 'PROJECTBOOK_VERSION=development')
+    body['Env']=[v for v in body['Env'] if not v.startswith(('MANAGER_IMAGE=','PROJECTBOOK_VERSION='))]+['MANAGER_IMAGE='+target,version]
     stopped=False;renamed=False;created=False
     try:
         docker_api('POST','/containers/'+ident+'/stop?t=30');stopped=True

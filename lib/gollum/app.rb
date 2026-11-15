@@ -24,6 +24,7 @@ require 'gollum/projectbook_inline_todos'
 require 'gollum/projectbook_raw_notes'
 require 'gollum/projectbook_mcp'
 require 'gollum/projectbook_settings'
+require 'gollum/projectbook_editing'
 require 'gollum/projectbook_tree'
 require 'gollum/projectbook_move'
 
@@ -100,6 +101,7 @@ module Precious
     register Mustache::Sinatra
     register Sinatra::Namespace
     use Gollum::ProjectbookCreation::WriteLock
+    use Gollum::ProjectbookEditing::Endpoint
     use Gollum::ProjectbookSettings::Endpoint
     use Gollum::ProjectbookMCP::Endpoint, self
     include Precious::Helpers

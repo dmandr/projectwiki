@@ -85,16 +85,8 @@ def handler(manager, gateway, auth, kind):
             return json.loads(self.rfile.read(size))
 
         def manager_version(self):
-            from updates import latest
-            release=latest('manager')
-            obj=manager.docker.inspect(os.environ.get('HOSTNAME',''))
-            image=manager.docker.inspect(obj['Image'],'image')
-            result = {'current':os.environ.get('PROJECTBOOK_VERSION','development'),'latest':release['version'],'target':release['image'],'available':not (obj['Config']['Image']==release['image'] or release['image'] in image.get('RepoDigests',[]) or obj['Image']==release['configs'].get(image.get('Architecture')))}
-            current=os.environ.get('PROJECTBOOK_VERSION','')
-            if result['available'] and re.fullmatch(r'[a-f0-9]{40}',current) and current!=release['revision']:
-                from updates import newer_release
-                result['available']=newer_release(current,release['revision'])
-            return result
+            from auto_update import manager_version
+            return manager_version(manager)
 
 
         def do_GET(self):
@@ -120,6 +112,10 @@ def handler(manager, gateway, auth, kind):
                     return
                 if self.path == '/api/github':
                     self.send(200, manager.github.status(principal))
+                    return
+                if self.path == '/api/auto-update':
+                    from auto_update import setting
+                    self.send(200, setting(manager))
                     return
                 if self.path == '/api/books':
                     books = manager.registry.books()
@@ -167,16 +163,14 @@ def handler(manager, gateway, auth, kind):
                 data = self.body()
                 if not isinstance(data, dict):
                     raise Problem('Expected an object.')
+                if self.path == '/api/auto-update':
+                    from auto_update import setting
+                    if 'enabled' not in data: raise Problem('Expected enabled.')
+                    self.send(200, setting(manager, data['enabled']))
+                    return
                 if self.path == '/api/manager/update':
-                    if manager.active:raise Problem('Wait for book operations to finish.',409)
-                    current=self.manager_version()
-                    if data.get('target')!=current['target'] or not current['available']:raise Problem('Refresh available Manager version.',409)
-                    manager.docker.run('pull',current['target'],timeout=900)
-                    obj=manager.docker.inspect(os.environ.get('HOSTNAME',''))
-                    mounts=['--mount','type=bind,src=/var/run/docker.sock,dst=/var/run/docker.sock']
-                    state=next((m for m in obj['Mounts'] if m['Destination']=='/data' and m['Type']=='bind'),None)
-                    if state:mounts+=['--mount','type=bind,src='+str(Path(state['Source']).parent)+',dst=/deployment']
-                    manager.docker.run('run','-d','--name','projectbook-manager-updater-'+str(__import__('time').time_ns()),*mounts,'--entrypoint','python',obj['Image'],'-m','manager_update',obj['Id'],current['target'])
+                    from auto_update import launch_manager
+                    launch_manager(manager, data.get('target'))
                     self.send(202,{'started':True})
                     return
                 if self.path == '/api/github/connect':
@@ -254,6 +248,8 @@ if __name__ == '__main__':
     auth = Auth()
     manager = Manager(os.environ.get('MANAGER_DATA', '/data'),recover_operations=True)
     threading.Thread(target=manager.sync_loop, daemon=True).start()
+    from auto_update import loop
+    threading.Thread(target=loop,args=(manager,),daemon=True).start()
     gateway = Gateway(manager)
     admin = ThreadingHTTPServer(('0.0.0.0', 8070), handler(manager, gateway, auth, 'admin'))
     mcp = ThreadingHTTPServer(('0.0.0.0', 8071), handler(manager, gateway, auth, 'mcp'))

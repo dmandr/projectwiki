@@ -98,7 +98,16 @@ async function refreshResources(force=false){
 }
 setInterval(refreshResources,15000);
 
-async function refreshVersions(){try{const r=await api("/api/versions");versions=r.books;if(r.manager){managerVersion.replaceChildren(el('span','',` · Manager ${r.manager.current} · Latest: ${r.manager.latest}`));if(r.manager.available){const u=el('button','compact-update','Update');u.onclick=async()=>{u.disabled=true;try{await api('/api/manager/update',{target:r.manager.target});notice('Manager is updating; reconnecting…');setTimeout(()=>location.reload(),12000);}catch(e){notice(e.message);u.disabled=false;}};managerVersion.append(u);}}versionError=r.error||"";render();}catch(e){versionError="Release check unavailable";render();}}
+const shortVersion=value=>/^[a-f0-9]{40}$/.test(value||'')?value.slice(0,12):value;
+async function refreshVersions(){try{const r=await api("/api/versions");versions=r.books;if(r.manager){const label=el('span','',`Manager ${shortVersion(r.manager.current)} · Latest: ${shortVersion(r.manager.latest)}`);label.title=`Current: ${r.manager.current}\nLatest: ${r.manager.latest}`;managerVersion.replaceChildren(label);if(r.manager.available){const u=el('button','compact-update','Update');u.onclick=async()=>{u.disabled=true;try{await api('/api/manager/update',{target:r.manager.target});notice('Manager is updating; reconnecting…');setTimeout(()=>location.reload(),12000);}catch(e){notice(e.message);u.disabled=false;}};managerVersion.append(u);}}versionError=r.error||"";render();}catch(e){versionError="Release check unavailable";render();}}
 setTimeout(refreshVersions,0);setInterval(refreshVersions,120000);
 
 const managerVersion=el('span','hint','');$('footer').append(managerVersion);
+
+const autoLabel=el('label','auto-update'), autoInput=el('input');autoInput.type='checkbox';
+autoLabel.append(autoInput,el('span','','Auto Update'));
+const autoStatus=el('span','hint','');autoLabel.title='Automatically update books and Manager from published releases. Open editors delay book updates.';
+$('footer').append(autoLabel,autoStatus);
+autoInput.onchange=async()=>{autoInput.disabled=true;try{const r=await api('/api/auto-update',{enabled:autoInput.checked});autoInput.checked=r.enabled;autoStatus.textContent=r.status;}catch(e){autoInput.checked=!autoInput.checked;notice(e.message);}finally{autoInput.disabled=false;}};
+async function refreshAuto(){try{const r=await api('/api/auto-update');if(!autoInput.disabled)autoInput.checked=r.enabled;autoStatus.textContent=r.enabled?r.status:'';}catch{autoStatus.textContent='Auto Update unavailable';}}
+void refreshAuto();setInterval(refreshAuto,15000);

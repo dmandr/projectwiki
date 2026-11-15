@@ -99,6 +99,7 @@ Gem::Specification.new do |s|
     lib/gollum/projectbook_callouts.rb
     lib/gollum/projectbook_tree.rb
     lib/gollum/projectbook_move.rb
+    lib/gollum/projectbook_editing.rb
     lib/gollum/projectbook_settings.rb
     lib/gollum/helpers.rb
     lib/gollum/locales/cn.yml

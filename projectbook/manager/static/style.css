@@ -8,3 +8,9 @@ fieldset{border:1px solid var(--line);border-radius:8px;padding:14px 16px}legend
 button.resource-link{border:0;background:none;padding:0;box-shadow:none}
 
 button.compact-update,.actions button,.actions a{font-size:.82rem;padding:5px 9px;border-radius:5px;min-height:28px}.details{gap:8px}
+
+footer {display:flex;align-items:center;flex-wrap:wrap;gap:.6rem 1rem;}
+footer > .hint {display:inline-flex;align-items:center;flex-wrap:wrap;gap:.5rem;font-size:.8rem;min-width:0;}
+footer .compact-update {padding:.25rem .6rem;font-size:.8rem;line-height:1.4;border-radius:6px;}
+.auto-update {display:inline-flex;align-items:center;gap:.4rem;font-size:.85rem;white-space:nowrap;}
+.auto-update input {width:auto;margin:0;}

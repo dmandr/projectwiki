@@ -55,3 +55,15 @@ class UpdatesTest(unittest.TestCase):
             def apply(manager,book):manager.registry.update('x',update_phase='complete',update_backup=book['update_role']+'-backup')
             update.side_effect=apply;updates.update_book(m,b)
             self.assertEqual([c.args[1]['update_role'] for c in update.call_args_list],['wiki','rag']);self.assertFalse(m.registry.get('x')['bundle_active'])
+
+    def test_open_editor_never_stops_container(self):
+        m=self.manager();m.editing.side_effect=updates.Problem('Open editor',409)
+        with self.assertRaises(updates.Problem):updates.update_book(m,{'id':'x'})
+        m.docker.run.assert_not_called()
+        self.assertEqual(m.editing.call_count,1)
+
+    @patch('updates._update_book',side_effect=RuntimeError('failure'))
+    def test_bundle_always_releases_editor_fence(self,apply):
+        m=self.manager()
+        with self.assertRaises(RuntimeError):updates.update_book(m,{'id':'x'})
+        self.assertEqual([c.args[1] for c in m.editing.call_args_list],['prepare','resume'])

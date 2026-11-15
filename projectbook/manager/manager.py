@@ -249,6 +249,7 @@ class Manager:
 
     def start(self, book_id, action):
         with self.guard:
+            if getattr(self, 'self_updating', False):raise Problem('Manager is updating.',409)
             b = self.registry.get(book_id)
             if action == 'update' and b['state'] not in ('ready','error'):
                 raise Problem('Book must be ready before updating.',409)
@@ -504,6 +505,13 @@ class Manager:
                     if parsed.get('id') == request_id:
                         return parsed
             raise Problem('Book returned no MCP response.', 503)
+        return response.json()
+
+    def editing(self, b, action):
+        response = requests.post('http://' + self.name(b,'wiki') + ':4567/gollum/projectbook/editing',
+            headers={'Authorization':'Bearer '+b['token'],'Host':urlsplit(b['url']).netloc},
+            json={'action':action},timeout=(4,10),allow_redirects=False)
+        if response.status_code != 200:raise Problem('Waiting for open editors, or editor status unavailable.',409)
         return response.json()
 
     def index_status(self, b):

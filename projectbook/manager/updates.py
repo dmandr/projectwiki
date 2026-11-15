@@ -170,6 +170,15 @@ def restore_dependency(manager,b):
 
 
 def update_book(manager,b):
+    manager.editing(b,'prepare')
+    try:
+        return _update_book(manager,b)
+    finally:
+        try:manager.editing(b,'resume')
+        except Exception:pass  # Persisted fence expires; no editor data is discarded.
+
+
+def _update_book(manager,b):
     roles=['wiki']+(['rag'] if b.get('indexing') else [])
     releases={role:latest(role) for role in roles}
     targets=b.get('update_targets',{})
